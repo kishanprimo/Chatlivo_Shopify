@@ -2,10 +2,10 @@ import { useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import Dashboard from "../components/dashboard/Dashboard";
+//import Dashboard from "../components/dashboard/Dashboard";
 import Welcome from "../components/auth/Welcome";
 import Login from "../components/auth/Login";
-
+import ChatlivoApp from "../chatlivo/App";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   return null;
@@ -45,9 +45,7 @@ export default function AppIndex() {
       return <div>Verify OTP Screen</div>;
     case "dashboard":
       return (
-        <Dashboard
-          organizationId={organizationId ?? 0}
-        />
+        <ChatlivoApp />
       );
     default:
       return null;

@@ -17,7 +17,7 @@ export default function Login({
     const handleLogin = async () => {
         try {
             setLoading(true);
-
+            console.log("1. Starting login");
             const response = await fetch(`${API_BASE_URL}/auth/signup`, {
                 method: "POST",
                 headers: {
@@ -30,7 +30,7 @@ export default function Login({
                     is_signup: false,
                 }),
             });
-
+            console.log("2. Login API completed");
             const data = await response.json();
 
             console.log("LOGIN RESPONSE:", data);
@@ -39,6 +39,7 @@ export default function Login({
                 alert(data.message || "Login failed");
                 return;
             }
+            console.log("4. Connect request completed");
 
             const connectResponse = await fetch("/api/shopify/connect", {
                 method: "POST",
@@ -51,16 +52,17 @@ export default function Login({
             });
 
             const connectData = await connectResponse.json();
-
+            console.log("5. Connect response:", connectData);
             console.log(connectData);
 
             if (!connectResponse.ok) {
                 alert(connectData.message);
                 return;
             }
+            const token = data.data.token;
 
-            onLoginSuccess(data.data.organization_id);
-
+            window.location.href =
+                `${import.meta.env.VITE_CHATLIVO_APP_URL}/shopify-auth?token=${encodeURIComponent(token)}`;
             // We'll use these in the next step
             // const token = data.data.token;
             // const organizationId = data.data.organization_id;

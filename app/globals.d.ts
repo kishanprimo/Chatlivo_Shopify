@@ -1,4 +1,5 @@
 declare module "*.css";
+declare module "js-cookie";
 
 declare namespace JSX {
   interface IntrinsicElements {
