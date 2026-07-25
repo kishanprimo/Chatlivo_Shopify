@@ -3,8 +3,8 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 //import Dashboard from "../components/dashboard/Dashboard";
-import Welcome from "../components/auth/Welcome";
-import Login from "../components/auth/Login";
+// import Welcome from "../components/auth/Welcome";
+// import Login from "../components/auth/Login";
 import ChatlivoApp from "../chatlivo/App";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -20,23 +20,23 @@ export default function AppIndex() {
 
   switch (screen) {
     case "welcome":
-      return (
-        <Welcome
-          onLogin={() => setScreen("login")}
-          onSignup={() => setScreen("signup")}
-        />
-      );
+      // return (
+      //   <Welcome
+      //     onLogin={() => setScreen("login")}
+      //     onSignup={() => setScreen("signup")}
+      //   />
+      // );
 
     case "login":
-      return (
-        <Login
-          onBack={() => setScreen("welcome")}
-          onLoginSuccess={(organizationId) => {
-            setOrganizationId(organizationId);
-            setScreen("dashboard");
-          }}
-        />
-      );
+      // return (
+      //   <Login
+      //     onBack={() => setScreen("welcome")}
+      //     onLoginSuccess={(organizationId) => {
+      //       setOrganizationId(organizationId);
+      //       setScreen("dashboard");
+      //     }}
+      //   />
+      // );
 
     case "signup":
       return <div>Signup Screen</div>;
