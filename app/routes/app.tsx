@@ -7,16 +7,13 @@ import { authenticate } from "../shopify.server";
 
 import prisma from "../db.server";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  console.log("APP.TSX LOADER");
+  console.log("URL:", request.url);
 
-  const session = await prisma.session.findFirst({
-    where: {
-      isOnline: false,
-    },
-  });
+  const auth = await authenticate.admin(request);
 
-  console.log("SHOPIFY SESSION");
-  console.log(session);
+  console.log("========== AUTH OBJECT ==========");
+  console.dir(auth, { depth: null });
 
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",

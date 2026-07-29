@@ -1,55 +1,144 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 //import Dashboard from "../components/dashboard/Dashboard";
 // import Welcome from "../components/auth/Welcome";
 // import Login from "../components/auth/Login";
-import ChatlivoApp from "../chatlivo/App";
+
+import { useLoaderData } from "react-router";
+import { redirect } from "react-router";
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-  return null;
+  console.log("=================================");
+  console.log("APP INDEX LOADER HIT");
+  console.log("URL:", request.url);
+  console.log("=================================");
+
+  const { admin, session } = await authenticate.admin(request);
+
+  // 1. Fetch shop information from Shopify
+  const shopResponse = await admin.graphql(`
+    query GetShop {
+      shop {
+        id
+        name
+        email
+        myshopifyDomain
+        currencyCode
+        timezoneAbbreviation
+        shopOwnerName
+
+        billingAddress {
+          country
+        }
+
+        plan {
+          displayName
+        }
+      }
+    }
+  `);
+
+  const shopResult = await shopResponse.json();
+  const shop = shopResult.data.shop;
+
+  // 2. Send shop details to Chatlivo backend
+  const backendResponse = await fetch(
+    "https://nemesis-bundle-mobility.ngrok-free.dev/api/shopify/onboarding",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
+      body: JSON.stringify({
+        shop_domain: shop.myshopifyDomain,
+        shop_name: shop.name,
+        email: shop.email,
+        owner: shop.shopOwnerName,
+        currency: shop.currencyCode,
+        country: shop.billingAddress?.country,
+        timezone: shop.timezoneAbbreviation,
+        plan: shop.plan?.displayName,
+        access_token: session.accessToken,
+        scope: session.scope,
+      }),
+    },
+  );
+
+  const backendData = await backendResponse.json();
+  console.log("BACKEND RESPONSE:");
+  console.dir(backendData, { depth: null });
+  const onboarding = backendData.data;
+
+
+
+  return {
+    shop,
+    onboarding,
+  };
 };
 
 export default function AppIndex() {
-  const [screen, setScreen] = useState<
-    "welcome" | "login" | "signup" | "otp" | "dashboard"
-  >("welcome");
+  const { shop, onboarding } = useLoaderData<typeof loader>();
 
-  const [organizationId, setOrganizationId] = useState<number | null>(null);
+  console.log("SHOPIFY SHOP", shop);
+  console.log("ONBOARDING", onboarding);
+  useEffect(() => {
+    if (onboarding.action !== "login") return;
 
-  switch (screen) {
-    case "welcome":
-      // return (
-      //   <Welcome
-      //     onLogin={() => setScreen("login")}
-      //     onSignup={() => setScreen("signup")}
-      //   />
-      // );
+    const params = new URLSearchParams({
+      token: onboarding.token,
+      verified: String(onboarding.is_user_verified),
+      setup: String(onboarding.is_setup_complete),
+      organization_id: String(onboarding.organization_id),
+      chatbot_id: String(onboarding.chatbot_id ?? ""),
+    });
 
-    case "login":
-      // return (
-      //   <Login
-      //     onBack={() => setScreen("welcome")}
-      //     onLoginSuccess={(organizationId) => {
-      //       setOrganizationId(organizationId);
-      //       setScreen("dashboard");
-      //     }}
-      //   />
-      // );
+    const url = `http://localhost:3000/shopify-login?${params.toString()}`;
 
-    case "signup":
-      return <div>Signup Screen</div>;
-
-    case "otp":
-      return <div>Verify OTP Screen</div>;
-    case "dashboard":
-      return (
-        <ChatlivoApp />
-      );
-    default:
-      return null;
+    if (window.top) {
+      window.open(url, "_top");
+    } else {
+      window.location.href = url;
+    }
+  }, [onboarding]);
+  if (onboarding.action === "signup") {
+    return (
+      <div
+        style={{
+          padding: 40,
+          fontSize: 20,
+        }}
+      >
+        Shopify Signup Screen
+      </div>
+    );
   }
+
+  if (onboarding.action === "login") {
+    return (
+      <div
+        style={{
+          padding: 40,
+          fontSize: 18,
+        }}
+      >
+        Redirecting to Chatlivo...
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        padding: 40,
+      }}
+    >
+      Loading...
+    </div>
+  );
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
