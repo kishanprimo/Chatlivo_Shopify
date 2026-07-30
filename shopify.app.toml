@@ -2,7 +2,7 @@
 
 client_id = "26949b2c72812ece1834683cf57b9917"
 name = "Chatlivo"
-application_url = "https://example.com"
+application_url = "https://shopify.chatlivo.com"
 embedded = true
 
 [build]
@@ -20,4 +20,4 @@ uri = "/webhooks/app/uninstalled"
 scopes = "write_products,write_metaobjects,write_metaobject_definitions"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://shopify.chatlivo.com/auth/callback" ]
