@@ -7,10 +7,36 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   console.log(`Received ${topic} webhook for ${shop}`);
 
-  // Webhook requests can trigger multiple times and after an app has already been uninstalled.
-  // If this webhook already ran, the session may have been deleted previously.
   if (session) {
-    await db.session.deleteMany({ where: { shop } });
+    await db.session.deleteMany({
+      where: { shop },
+    });
+  }
+
+  try {
+    const response = await fetch(
+      `${process.env.CHATLIVO_BACKEND_URL}/shopify/uninstall`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          shop_domain: shop,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      console.error(
+        "Failed to disconnect Shopify store:",
+        await response.text()
+      );
+    } else {
+      console.log(`Disconnected Shopify store: ${shop}`);
+    }
+  } catch (error) {
+    console.error("Error calling backend uninstall API:", error);
   }
 
   return new Response();
