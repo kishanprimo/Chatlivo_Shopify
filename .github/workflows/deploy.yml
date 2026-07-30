@@ -22,18 +22,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-    
-      - name: Build project
-        run: npm run build
-        env:
-          VITE_CHATLIVO_APP_URL: ${{ secrets.VITE_CHATLIVO_APP_URL }}
-          CHATLIVO_BACKEND_URL: ${{ secrets.CHATLIVO_BACKEND_URL }}
 
-      - name: Deploy build folder
+      - name: Deploy entire project
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avzr --delete
-          path: ./build/
+          switches: -avzr --delete --exclude=node_modules --exclude=.git --exclude=.env.local --exclude=build
+          path: ./
           remote_path: /var/www/shopify.chatlivo.com
           remote_host: ${{ secrets.SERVER_HOST }}
           remote_user: ${{ secrets.SERVER_USER }}
@@ -41,7 +35,7 @@ jobs:
           remote_port: 22
           legacy_allow_rsa_hostkeys: true
 
-      - name: Restart app on server
+      - name: Build and run on server
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -51,6 +45,7 @@ jobs:
           script: |
             cd /var/www/shopify.chatlivo.com
             npm install
-            npm run setup
+            # npm run setup
+            npm run build
             pm2 restart shopify-chatlivo --update-env || pm2 start npm --name shopify-chatlivo -- start
             echo "Deployment complete!"
