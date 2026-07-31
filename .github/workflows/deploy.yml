@@ -26,7 +26,7 @@ jobs:
       - name: Deploy entire project
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avzr --delete --exclude=node_modules --exclude=.git --exclude=.env.local --exclude=build
+          switches: -avzr --delete --exclude=node_modules --exclude=.git --exclude=.env.local --exclude=build --exclude=dev.sqlite --exclude=logs
           path: ./
           remote_path: /var/www/shopify.chatlivo.com
           remote_host: ${{ secrets.SERVER_HOST }}
@@ -37,11 +37,17 @@ jobs:
 
       - name: Build and Deploy on server
         uses: appleboy/ssh-action@v1
+        env:
+          SHOPIFY_APP_URL: ${{ secrets.SHOPIFY_APP_URL }}
+          SHOPIFY_API_KEY: ${{ secrets.SHOPIFY_API_KEY }}
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET }}
+          CHATLIVO_BACKEND_URL: ${{ secrets.CHATLIVO_BACKEND_URL }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
+          envs: SHOPIFY_APP_URL,SHOPIFY_API_KEY,SHOPIFY_API_SECRET,CHATLIVO_BACKEND_URL
           script: |
             cd /var/www/shopify.chatlivo.com
 
@@ -55,10 +61,15 @@ jobs:
             npm run build
 
             echo "🛑 Stopping existing PM2 process..."
-            pm2 stop shopify-chatlivo || true
+            pm2 stop shopify-chatlivo 2>/dev/null || true
+            pm2 delete shopify-chatlivo 2>/dev/null || true
 
             echo "▶️  Starting application with PM2..."
-            pm2 start ecosystem.config.js --update-env
+            SHOPIFY_APP_URL="${SHOPIFY_APP_URL}" \
+            SHOPIFY_API_KEY="${SHOPIFY_API_KEY}" \
+            SHOPIFY_API_SECRET="${SHOPIFY_API_SECRET}" \
+            CHATLIVO_BACKEND_URL="${CHATLIVO_BACKEND_URL}" \
+            pm2 start ecosystem.config.js
 
             echo "💾 Saving PM2 process list..."
             pm2 save
