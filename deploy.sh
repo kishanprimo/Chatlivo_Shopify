@@ -23,7 +23,7 @@ pm2 delete shopify-chatlivo || true
 
 # Start with PM2
 echo "▶️  Starting app with PM2..."
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 
 # Save PM2 process list for auto-restart on reboot
 echo "💾 Saving PM2 process list..."
