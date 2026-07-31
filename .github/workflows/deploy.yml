@@ -35,7 +35,7 @@ jobs:
           remote_port: 22
           legacy_allow_rsa_hostkeys: true
 
-      - name: Build and run on server
+      - name: Build and Deploy on server
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -44,8 +44,28 @@ jobs:
           port: 22
           script: |
             cd /var/www/shopify.chatlivo.com
+
+            echo "📦 Installing dependencies..."
             npm install
-            # npm run setup
+
+            echo "🗄️  Setting up database..."
+            npm run setup
+
+            echo "🔨 Building application..."
             npm run build
-            pm2 restart shopify-chatlivo --update-env || pm2 start npm --name shopify-chatlivo -- start
-            echo "Deployment complete!"
+
+            echo "🛑 Stopping existing PM2 process..."
+            pm2 stop shopify-chatlivo || true
+
+            echo "▶️  Starting application with PM2..."
+            pm2 start ecosystem.config.js --update-env
+
+            echo "💾 Saving PM2 process list..."
+            pm2 save
+
+            echo ""
+            echo "✅ Deployment complete!"
+            echo ""
+            pm2 status
+            echo ""
+            echo "📊 View logs: pm2 logs shopify-chatlivo"

@@ -13,30 +13,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  try {
-    const response = await fetch(
-      `${process.env.CHATLIVO_BACKEND_URL}/shopify/uninstall`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          shop_domain: shop,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      console.error(
-        "Failed to disconnect Shopify store:",
-        await response.text()
+  if (process.env.CHATLIVO_BACKEND_URL) {
+    try {
+      const response = await fetch(
+        `${process.env.CHATLIVO_BACKEND_URL}/shopify/uninstall`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            shop_domain: shop,
+          }),
+        }
       );
-    } else {
-      console.log(`Disconnected Shopify store: ${shop}`);
+
+      if (!response.ok) {
+        console.warn(
+          "Backend uninstall notification failed:",
+          response.status,
+          await response.text()
+        );
+      } else {
+        console.log(`Backend notified of store uninstall: ${shop}`);
+      }
+    } catch (error) {
+      console.warn("Could not reach backend uninstall API:", error instanceof Error ? error.message : String(error));
     }
-  } catch (error) {
-    console.error("Error calling backend uninstall API:", error);
   }
 
   return new Response();

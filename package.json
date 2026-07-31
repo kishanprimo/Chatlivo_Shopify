@@ -17,7 +17,13 @@
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
-    "typecheck": "react-router typegen && tsc --noEmit"
+    "typecheck": "react-router typegen && tsc --noEmit",
+    "deploy:pm2": "./deploy.sh",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop shopify-chatlivo",
+    "pm2:restart": "pm2 restart shopify-chatlivo",
+    "pm2:logs": "pm2 logs shopify-chatlivo",
+    "pm2:status": "pm2 status"
   },
   "type": "module",
   "engines": {
