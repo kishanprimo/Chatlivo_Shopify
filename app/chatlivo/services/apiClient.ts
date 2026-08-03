@@ -6,7 +6,7 @@ import axios, {
 import Cookies from "js-cookie";
 
 const apiClient: AxiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL: import.meta.env.NEXT_PUBLIC_API_URL,
   headers: {
     "Content-Type": "application/json",
   },

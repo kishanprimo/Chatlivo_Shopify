@@ -1,5 +1,5 @@
 export const buildImageUrl = (path?: string | null) => {
-  const baseUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+  const baseUrl = import.meta.env.NEXT_PUBLIC_SOCKET_URL;
 
   if (!path || typeof path !== "string") return "";
 

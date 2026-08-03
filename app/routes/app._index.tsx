@@ -14,10 +14,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   console.log("APP INDEX LOADER HIT");
   console.log("URL:", request.url);
   console.log("=================================");
-
+  console.log("STEP 1 -> Authenticating with Shopify...");
   const { admin, session } = await authenticate.admin(request);
+  console.log("✅ Shopify Authentication Successful");
 
+  console.log("Shop:", session.shop);
+  console.log("Scopes:", session.scope);
+  console.log("Access Token Exists:", !!session.accessToken);
   // 1. Fetch shop information from Shopify
+  console.log("STEP 2 -> Calling Shopify GraphQL...");
   const shopResponse = await admin.graphql(`
     query GetShop {
       shop {
@@ -41,16 +46,44 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   `);
 
   const shopResult = await shopResponse.json();
+  console.log("✅ GraphQL Success");
+
+  console.dir(shopResult, {
+    depth: null,
+  });
   const shop = shopResult.data.shop;
 
   // 2. Send shop details to Chatlivo backend
+  // const backendResponse = await fetch(
+  //   `${process.env.CHATLIVO_BACKEND_URL}/api/shopify/onboarding`,
+  //   {
+  //     method: "POST",
+  //     headers: {
+  //       "Content-Type": "application/json",
+  //       "ngrok-skip-browser-warning": "true",
+  //     },
+  //     body: JSON.stringify({
+  //       shop_domain: shop.myshopifyDomain,
+  //       shop_name: shop.name,
+  //       email: shop.email,
+  //       owner: shop.shopOwnerName,
+  //       currency: shop.currencyCode,
+  //       country: shop.billingAddress?.country,
+  //       timezone: shop.timezoneAbbreviation,
+  //       plan: shop.plan?.displayName,
+  //       access_token: session.accessToken,
+  //       scope: session.scope,
+  //     }),
+  //   },
+  // );
+
+  // const backendData = await backendResponse.json();
   const backendResponse = await fetch(
-    `${process.env.CHATLIVO_BACKEND_URL}api/shopify/onboarding`,
+    `${process.env.CHATLIVO_BACKEND_URL}/api/shopify/onboarding`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "ngrok-skip-browser-warning": "true",
       },
       body: JSON.stringify({
         shop_domain: shop.myshopifyDomain,
@@ -64,15 +97,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         access_token: session.accessToken,
         scope: session.scope,
       }),
-    },
+    }
   );
 
-  const backendData = await backendResponse.json();
+  console.log("Backend Status:", backendResponse.status);
+
+  const rawResponse = await backendResponse.text();
+
+  console.log("Backend Raw Response:");
+  console.log(rawResponse);
+
+  let backendData;
+
+  try {
+    backendData = JSON.parse(rawResponse);
+  } catch (e) {
+    console.error("JSON Parse Failed");
+    throw e;
+  }
   console.log("BACKEND RESPONSE:");
   console.dir(backendData, { depth: null });
   const onboarding = backendData.data;
 
+  console.log("Onboarding:");
 
+  console.dir(onboarding, {
+    depth: null,
+  });
 
   return {
     shop,
@@ -96,7 +147,7 @@ export default function AppIndex() {
       chatbot_id: String(onboarding.chatbot_id ?? ""),
     });
 
-    const url = `${process.env.VITE_CHATLIVO_APP_URL}shopify-login?${params.toString()}`;
+    const url = `${import.meta.env.VITE_CHATLIVO_APP_URL}/shopify-login?${params.toString()}`;
 
     if (window.top) {
       window.open(url, "_top");

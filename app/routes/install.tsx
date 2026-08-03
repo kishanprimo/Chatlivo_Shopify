@@ -12,7 +12,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     });
   }
 
-  const backendUrl = process.env.CHATLIVO_BACKEND_URL!;
+  const backendUrl = import.meta.env.CHATLIVO_BACKEND_URL!;
 
   return redirect(
     `${backendUrl}/api/shopify/install?shop=${encodeURIComponent(shop)}`,

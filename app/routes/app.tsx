@@ -16,7 +16,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   console.dir(auth, { depth: null });
 
   return {
-    apiKey: process.env.SHOPIFY_API_KEY || "",
+    apiKey: import.meta.env.SHOPIFY_API_KEY || "",
   };
 };
 

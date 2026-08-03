@@ -15,8 +15,9 @@ if (
   delete process.env.HOST;
 }
 
-const host = new URL(process.env.SHOPIFY_APP_URL || "http://localhost")
-  .hostname;
+const host = new URL(
+  process.env.SHOPIFY_APP_URL || "http://localhost"
+).hostname;
 
 let hmrConfig;
 if (host === "localhost") {
@@ -30,7 +31,7 @@ if (host === "localhost") {
   hmrConfig = {
     protocol: "wss",
     host: host,
-    port: parseInt(process.env.FRONTEND_PORT!) || 8002,
+    port: parseInt(process.env.FRONTEND_PORT || "8002"),
     clientPort: 443,
   };
 }

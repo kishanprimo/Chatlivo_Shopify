@@ -13,10 +13,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  if (process.env.CHATLIVO_BACKEND_URL) {
+  if (import.meta.env.CHATLIVO_BACKEND_URL) {
     try {
       const response = await fetch(
-        `${process.env.CHATLIVO_BACKEND_URL}/shopify/uninstall`,
+        `${import.meta.env.CHATLIVO_BACKEND_URL}/shopify/uninstall`,
         {
           method: "POST",
           headers: {

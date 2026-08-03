@@ -50,7 +50,7 @@ const queryClient = new QueryClient({
 const AppProvider = ({ children }: { children: ReactNode }) => {
   return (
     <>
-      <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_SIGNIN_ID!}>
+      <GoogleOAuthProvider clientId={import.meta.env.NEXT_PUBLIC_GOOGLE_SIGNIN_ID!}>
         <Provider store={store}>
            
           <QueryClientProvider client={queryClient}>
