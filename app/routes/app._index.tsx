@@ -45,7 +45,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // 2. Send shop details to Chatlivo backend
   const backendResponse = await fetch(
-    "https://nemesis-bundle-mobility.ngrok-free.dev/api/shopify/onboarding",
+    `${process.env.CHATLIVO_BACKEND_URL}api/shopify/onboarding`,
     {
       method: "POST",
       headers: {
@@ -96,7 +96,7 @@ export default function AppIndex() {
       chatbot_id: String(onboarding.chatbot_id ?? ""),
     });
 
-    const url = `http://localhost:3000/shopify-login?${params.toString()}`;
+    const url = `${process.env.VITE_CHATLIVO_APP_URL}shopify-login?${params.toString()}`;
 
     if (window.top) {
       window.open(url, "_top");
