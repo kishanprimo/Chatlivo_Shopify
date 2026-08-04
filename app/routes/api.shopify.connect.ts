@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs } from "react-router";
-import prisma from "../db.server";
+
+import ShopifySession from "../database/models/ShopifySession";
 
 const BACKEND_URL =
   "https://nemesis-bundle-mobility.ngrok-free.dev/api";
@@ -32,12 +33,11 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    const session = await prisma.session.findFirst({
+    const session = await ShopifySession.findOne({
       where: {
-        isOnline: false,
+        is_online: false,
       },
     });
-
     if (!session) {
       return Response.json(
         {
@@ -60,7 +60,8 @@ export async function action({ request }: ActionFunctionArgs) {
       body: JSON.stringify({
         shop_domain: session.shop,
         shop_name: session.shop,
-        access_token: session.accessToken,
+        // access_token: session.accessToken,
+        access_token: session.access_token,
         scopes: session.scope ?? "",
       }),
     });

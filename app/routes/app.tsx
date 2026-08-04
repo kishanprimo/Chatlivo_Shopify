@@ -5,7 +5,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
 
-import prisma from "../db.server";
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   console.log("APP.TSX LOADER");
   console.log("URL:", request.url);
