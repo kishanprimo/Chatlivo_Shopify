@@ -7,8 +7,8 @@ import { store } from "./store/store";
 import { Toaster } from "react-hot-toast";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import InstallPopUpWrapper from "./InstallPopUpWrapper";
-import ShowUnreadNotificationCount from "./ShowUnreadNotificationCount";
+//import InstallPopUpWrapper from "./InstallPopUpWrapper";
+//import ShowUnreadNotificationCount from "./ShowUnreadNotificationCount";
 const ToastProviders = () => {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -50,12 +50,12 @@ const queryClient = new QueryClient({
 const AppProvider = ({ children }: { children: ReactNode }) => {
   return (
     <>
-      <GoogleOAuthProvider clientId={import.meta.env.NEXT_PUBLIC_GOOGLE_SIGNIN_ID!}>
+      <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_SIGNIN_ID!}>
         <Provider store={store}>
            
           <QueryClientProvider client={queryClient}>
-            <InstallPopUpWrapper />
-            <ShowUnreadNotificationCount />
+            {/* <InstallPopUpWrapper /> */}
+            {/* <ShowUnreadNotificationCount /> */}
             {children}
           </QueryClientProvider>
           <ToastProviders />
