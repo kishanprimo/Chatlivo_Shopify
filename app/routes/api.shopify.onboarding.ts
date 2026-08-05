@@ -2,7 +2,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 
 const BACKEND_URL =
-    "https://nemesis-bundle-mobility.ngrok-free.dev/api";
+    `${process.env.CHATLIVO_BACKEND_URL}` || "https://api.chatlivo.com";
 
 export async function action({
     request,
