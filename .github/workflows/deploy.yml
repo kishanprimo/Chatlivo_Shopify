@@ -26,7 +26,9 @@ jobs:
       - name: Deploy entire project
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avzr --delete --exclude=node_modules --exclude=.git --exclude=.env.local --exclude=build --exclude=dev.sqlite --exclude=logs
+          # --delete removes server files missing from the repo, so server-only
+          # files (.env with secrets, backups) must be excluded or they get wiped
+          switches: -avzr --delete --exclude=node_modules --exclude=.git --exclude=.env --exclude='.env.*' --exclude=build --exclude=dev.sqlite --exclude=logs
           path: ./
           remote_path: /var/www/shopify.chatlivo.com
           remote_host: ${{ secrets.SERVER_HOST }}

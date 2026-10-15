@@ -1,7 +1,7 @@
 // pm2 config for the Chatlivo Shopify app (production).
 // `npm start` (react-router-serve) does not read .env itself, so the .env
-// next to this file is loaded here and passed to the app. Values already set
-// in the shell environment take precedence over .env.
+// next to this file is loaded here and passed to the app. Non-empty values
+// already set in the shell environment take precedence over .env.
 const fs = require("fs");
 const path = require("path");
 
@@ -20,7 +20,12 @@ function loadEnvFile(file) {
   return env;
 }
 
-const env = { ...loadEnvFile(path.join(__dirname, ".env")), ...process.env };
+// Empty shell values (e.g. an unset CI secret) must not wipe out .env values
+const shellEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([, value]) => value !== undefined && value !== ""),
+);
+
+const env = { ...loadEnvFile(path.join(__dirname, ".env")), ...shellEnv };
 
 module.exports = {
   apps: [
