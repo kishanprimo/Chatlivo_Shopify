@@ -3,11 +3,11 @@ name: Test & Lint
 on:
   push:
     branches:
-      - main
+      - mainvv
       - develop
   pull_request:
     branches:
-      - main
+      - mainvv
       - develop
 
 jobs:

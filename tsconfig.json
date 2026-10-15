@@ -25,9 +25,6 @@
     "moduleResolution": "Bundler",
     "target": "ES2022",
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["app/chatlivo/*"]
-    },
     "types": [
       "@react-router/node",
       "vite/client",
