@@ -1,28 +1,29 @@
 import { useEffect } from "react";
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import type {
+  ActionFunctionArgs,
+  HeadersFunction,
+  LoaderFunctionArgs,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-//import Dashboard from "../components/dashboard/Dashboard";
-// import Welcome from "../components/auth/Welcome";
-// import Login from "../components/auth/Login";
+import { chatlivoBackendFetch } from "../services/chatlivoBackend.server";
 
-import { useLoaderData } from "react-router";
-import { redirect } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  console.log("=================================");
-  console.log("APP INDEX LOADER HIT");
-  console.log("URL:", request.url);
-  console.log("=================================");
-  console.log("STEP 1 -> Authenticating with Shopify...");
-  const { admin, session } = await authenticate.admin(request);
-  console.log("✅ Shopify Authentication Successful");
+type Onboarding = {
+  action?: string;
+  message?: string;
+  token?: string;
+  is_user_verified?: boolean;
+  is_setup_complete?: boolean;
+  organization_id?: number;
+  chatbot_id?: number | null;
+};
 
-  console.log("Shop:", session.shop);
-  console.log("Scopes:", session.scope);
-  console.log("Access Token Exists:", !!session.accessToken);
-  // 1. Fetch shop information from Shopify
-  console.log("STEP 2 -> Calling Shopify GraphQL...");
+type AdminContext = Awaited<ReturnType<typeof authenticate.admin>>;
+
+// Shop details + offline token, as the Chatlivo backend expects them
+async function getShopPayload({ admin, session }: AdminContext) {
   const shopResponse = await admin.graphql(`
     query GetShop {
       shop {
@@ -46,84 +47,58 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   `);
 
   const shopResult = await shopResponse.json();
-  console.log("✅ GraphQL Success");
-
-  console.dir(shopResult, {
-    depth: null,
-  });
   const shop = shopResult.data.shop;
 
-  // 2. Send shop details to Chatlivo backend
-  // const backendResponse = await fetch(
-  //   `${process.env.CHATLIVO_BACKEND_URL}/api/shopify/onboarding`,
-  //   {
-  //     method: "POST",
-  //     headers: {
-  //       "Content-Type": "application/json",
-  //       "ngrok-skip-browser-warning": "true",
-  //     },
-  //     body: JSON.stringify({
-  //       shop_domain: shop.myshopifyDomain,
-  //       shop_name: shop.name,
-  //       email: shop.email,
-  //       owner: shop.shopOwnerName,
-  //       currency: shop.currencyCode,
-  //       country: shop.billingAddress?.country,
-  //       timezone: shop.timezoneAbbreviation,
-  //       plan: shop.plan?.displayName,
-  //       access_token: session.accessToken,
-  //       scope: session.scope,
-  //     }),
-  //   },
-  // );
+  return {
+    shop,
+    payload: {
+      shop_domain: shop.myshopifyDomain,
+      shop_name: shop.name,
+      email: shop.email,
+      owner: shop.shopOwnerName,
+      currency: shop.currencyCode,
+      country: shop.billingAddress?.country,
+      timezone: shop.timezoneAbbreviation,
+      plan: shop.plan?.displayName,
+      access_token: session.accessToken,
+      scope: session.scope,
+    },
+  };
+}
 
-  // const backendData = await backendResponse.json();
-  const backendResponse = await fetch(
-    `${process.env.CHATLIVO_BACKEND_URL}/api/shopify/onboarding`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        shop_domain: shop.myshopifyDomain,
-        shop_name: shop.name,
-        email: shop.email,
-        owner: shop.shopOwnerName,
-        currency: shop.currencyCode,
-        country: shop.billingAddress?.country,
-        timezone: shop.timezoneAbbreviation,
-        plan: shop.plan?.displayName,
-        access_token: session.accessToken,
-        scope: session.scope,
-      }),
-    }
-  );
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const context = await authenticate.admin(request);
+  const { session } = context;
 
-  console.log("Backend Status:", backendResponse.status);
+  const { shop, payload } = await getShopPayload(context);
 
-  const rawResponse = await backendResponse.text();
-
-  console.log("Backend Raw Response:");
-  console.log(rawResponse);
-
-  let backendData;
-
+  // 2. Send shop details to Chatlivo backend.
+  // Never log the request or response: they carry the Shopify access token
+  // and a Chatlivo login token.
+  let onboarding: Onboarding;
   try {
-    backendData = JSON.parse(rawResponse);
-  } catch (e) {
-    console.error("JSON Parse Failed");
-    throw e;
+    const backendResponse = await chatlivoBackendFetch(
+      "/shopify/onboarding",
+      payload,
+    );
+
+    const backendData = await backendResponse.json().catch(() => null);
+
+    if (!backendResponse.ok || !backendData?.data) {
+      console.error(
+        `Chatlivo onboarding failed for ${session.shop}: status ${backendResponse.status}`,
+      );
+      onboarding = { action: "error" };
+    } else {
+      onboarding = backendData.data;
+    }
+  } catch (error) {
+    console.error(
+      `Chatlivo onboarding request failed for ${session.shop}:`,
+      error instanceof Error ? error.message : String(error),
+    );
+    onboarding = { action: "error" };
   }
-  console.log("BACKEND RESPONSE:");
-  console.dir(backendData, { depth: null });
-  const onboarding = backendData.data;
-
-  console.log("Onboarding:");
-
-  console.dir(onboarding, {
-    depth: null,
-  });
 
   return {
     shop,
@@ -131,16 +106,80 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
-export default function AppIndex() {
-  const { shop, onboarding } = useLoaderData<typeof loader>();
+const CONNECT_ERROR = "We couldn't connect your store right now. Please try again.";
 
-  console.log("SHOPIFY SHOP", shop);
-  console.log("ONBOARDING", onboarding);
+// Explicit merchant choices:
+// - signup: create a new Chatlivo account; the loader then re-runs, finds the
+//   store and logs the merchant in.
+// - connect: get a one-time token for this shop and open the Chatlivo
+//   dashboard, where a logged-in owner/admin confirms the connection.
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const context = await authenticate.admin(request);
+  const { session } = context;
+
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") ?? "");
+
+  if (intent !== "signup" && intent !== "connect") {
+    return { error: CONNECT_ERROR };
+  }
+
+  const { payload } = await getShopPayload(context);
+
+  try {
+    const backendResponse =
+      intent === "signup"
+        ? await chatlivoBackendFetch("/shopify/signup", payload)
+        : await chatlivoBackendFetch("/shopify/connect-token", payload);
+
+    const backendData = await backendResponse.json().catch(() => null);
+
+    if (!backendResponse.ok) {
+      return {
+        error:
+          backendResponse.status === 400 && backendData?.message
+            ? backendData.message
+            : CONNECT_ERROR,
+      };
+    }
+
+    // Signup refuses when the store email already has an account
+    if (backendData?.data?.action === "link_required") {
+      return { error: backendData.data.message ?? CONNECT_ERROR };
+    }
+
+    if (intent === "connect") {
+      const params = new URLSearchParams({
+        open: "shopify",
+        shopify_token: backendData.data.token,
+      });
+
+      return {
+        error: null,
+        redirectUrl: `${import.meta.env.VITE_CHATLIVO_APP_URL}/settings/integration?${params.toString()}`,
+      };
+    }
+
+    return { error: null };
+  } catch (error) {
+    console.error(
+      `Chatlivo ${intent} request failed for ${session.shop}:`,
+      error instanceof Error ? error.message : String(error),
+    );
+    return { error: CONNECT_ERROR };
+  }
+};
+
+export default function AppIndex() {
+  const { onboarding } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+
   useEffect(() => {
     if (onboarding.action !== "login") return;
 
     const params = new URLSearchParams({
-      token: onboarding.token,
+      token: onboarding.token ?? "",
       verified: String(onboarding.is_user_verified),
       setup: String(onboarding.is_setup_complete),
       organization_id: String(onboarding.organization_id),
@@ -155,18 +194,14 @@ export default function AppIndex() {
       window.location.href = url;
     }
   }, [onboarding]);
-  if (onboarding.action === "signup") {
-    return (
-      <div
-        style={{
-          padding: 40,
-          fontSize: 20,
-        }}
-      >
-        Shopify Signup Screen
-      </div>
-    );
-  }
+
+  // Leave the Shopify admin iframe for the Chatlivo dashboard
+  useEffect(() => {
+    if (!actionData || !("redirectUrl" in actionData) || !actionData.redirectUrl)
+      return;
+
+    window.open(actionData.redirectUrl, "_top");
+  }, [actionData]);
 
   if (onboarding.action === "login") {
     return (
@@ -177,6 +212,89 @@ export default function AppIndex() {
         }}
       >
         Redirecting to Chatlivo...
+      </div>
+    );
+  }
+
+  const submittingIntent =
+    navigation.state === "submitting"
+      ? navigation.formData?.get("intent")
+      : null;
+
+  const connectExisting = (
+    <>
+      <p>
+        Log in to Chatlivo and confirm this store. It takes one click if you
+        are already logged in.
+      </p>
+      <Form method="post" style={{ marginTop: 8 }}>
+        <input type="hidden" name="intent" value="connect" />
+        <button
+          type="submit"
+          disabled={submittingIntent !== null}
+          style={{ padding: "8px 16px", fontSize: 16 }}
+        >
+          {submittingIntent === "connect"
+            ? "Opening Chatlivo..."
+            : "Connect existing Chatlivo account"}
+        </button>
+      </Form>
+    </>
+  );
+
+  const errorMessage = actionData?.error && (
+    <p style={{ color: "#d72c0d", marginTop: 12 }}>{actionData.error}</p>
+  );
+
+  if (onboarding.action === "choose") {
+    return (
+      <div style={{ padding: 40, fontSize: 16, maxWidth: 520 }}>
+        <p style={{ fontSize: 18 }}>Connect this store to Chatlivo</p>
+
+        <h3 style={{ marginTop: 24 }}>New to Chatlivo?</h3>
+        <Form method="post">
+          <input type="hidden" name="intent" value="signup" />
+          <button
+            type="submit"
+            disabled={submittingIntent !== null}
+            style={{ padding: "8px 16px", fontSize: 16 }}
+          >
+            {submittingIntent === "signup"
+              ? "Creating account..."
+              : "Create a Chatlivo account"}
+          </button>
+        </Form>
+
+        <h3 style={{ marginTop: 32 }}>Already have a Chatlivo account?</h3>
+        {connectExisting}
+        {errorMessage}
+      </div>
+    );
+  }
+
+  if (onboarding.action === "link_required") {
+    return (
+      <div style={{ padding: 40, fontSize: 16, maxWidth: 520 }}>
+        <p style={{ fontSize: 18 }}>
+          {onboarding.message ||
+            "A Chatlivo account already exists for this store's email. Log in to Chatlivo to connect this store."}
+        </p>
+        {connectExisting}
+        {errorMessage}
+      </div>
+    );
+  }
+
+  if (onboarding.action === "error") {
+    return (
+      <div
+        style={{
+          padding: 40,
+          fontSize: 18,
+        }}
+      >
+        We couldn&apos;t connect to Chatlivo right now. Please reload this page in a
+        few minutes or contact Chatlivo support.
       </div>
     );
   }

@@ -1,0 +1,19 @@
+{%- comment -%}
+  Chatlivo live chat widget. The widget key and URL are app-data metafields
+  written by the Chatlivo backend when the store is linked to an account.
+{%- endcomment -%}
+{%- assign widget_key = app.metafields.chatlivo.widget_key.value -%}
+{%- assign widget_url = app.metafields.chatlivo.widget_url.value -%}
+{%- if widget_key != blank and widget_url != blank -%}
+  <script async src="{{ widget_url }}/loader.js" data-key="{{ widget_key }}"></script>
+{%- else -%}
+  <!-- Chatlivo: store not connected to a Chatlivo account yet -->
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Chatlivo chat widget",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}

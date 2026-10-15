@@ -15,10 +15,6 @@ import type { SessionStorage } from "@shopify/shopify-app-session-storage/dist/t
 
 export class SequelizeSessionStorage implements SessionStorage {
     async storeSession(session: Session): Promise<boolean> {
-        console.log("========== STORE SESSION ==========");
-        console.log(session.id);
-        console.log(session.shop);
-        console.log(session.isOnline);
         try {
             await ShopifySession.upsert({
                 id: session.id,
@@ -64,7 +60,12 @@ export class SequelizeSessionStorage implements SessionStorage {
 
             return true;
         } catch (error) {
-            console.error("Failed to store Shopify session:", error);
+            // Message only — a full Sequelize error can carry the query
+            // parameters, which include the access token
+            console.error(
+                "Failed to store Shopify session:",
+                error instanceof Error ? error.message : String(error),
+            );
             return false;
         }
     }

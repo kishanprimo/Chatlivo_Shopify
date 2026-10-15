@@ -7,13 +7,7 @@ import { authenticate } from "../shopify.server";
 
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  console.log("APP.TSX LOADER");
-  console.log("URL:", request.url);
-
-  const auth = await authenticate.admin(request);
-
-  console.log("========== AUTH OBJECT ==========");
-  console.dir(auth, { depth: null });
+  await authenticate.admin(request);
 
   return {
     apiKey: import.meta.env.SHOPIFY_API_KEY || "",
