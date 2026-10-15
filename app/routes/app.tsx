@@ -10,7 +10,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
 
   return {
-    apiKey: import.meta.env.SHOPIFY_API_KEY || "",
+    // Runtime env: Vite only exposes VITE_* through import.meta.env, so this
+    // would be empty in the production build and App Bridge could not auth
+    apiKey: process.env.SHOPIFY_API_KEY || "",
   };
 };
 
