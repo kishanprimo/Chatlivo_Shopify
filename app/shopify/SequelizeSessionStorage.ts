@@ -27,31 +27,6 @@ export class SequelizeSessionStorage implements SessionStorage {
 
                 access_token: session.accessToken ?? "",
 
-                user_id: session.onlineAccessInfo?.associated_user?.id
-                    ? BigInt(session.onlineAccessInfo.associated_user.id)
-                    : null,
-
-                first_name:
-                    session.onlineAccessInfo?.associated_user?.first_name ?? null,
-
-                last_name:
-                    session.onlineAccessInfo?.associated_user?.last_name ?? null,
-
-                email:
-                    session.onlineAccessInfo?.associated_user?.email ?? null,
-
-                account_owner:
-                    session.onlineAccessInfo?.associated_user?.account_owner ?? false,
-
-                locale:
-                    session.onlineAccessInfo?.associated_user?.locale ?? null,
-
-                collaborator:
-                    session.onlineAccessInfo?.associated_user?.collaborator ?? false,
-
-                email_verified:
-                    session.onlineAccessInfo?.associated_user?.email_verified ?? false,
-
                 refresh_token: session.refreshToken ?? null,
 
                 refresh_token_expires:
@@ -92,24 +67,6 @@ export class SequelizeSessionStorage implements SessionStorage {
             session.refreshToken = record.refresh_token ?? undefined;
             session.refreshTokenExpires =
                 record.refresh_token_expires ?? undefined;
-
-            if (record.user_id) {
-                session.onlineAccessInfo = {
-                    expires_in: 0,
-                    associated_user_scope: record.scope ?? "",
-
-                    associated_user: {
-                        id: Number(record.user_id),
-                        first_name: record.first_name ?? "",
-                        last_name: record.last_name ?? "",
-                        email: record.email ?? "",
-                        account_owner: record.account_owner,
-                        locale: record.locale ?? "",
-                        collaborator: record.collaborator,
-                        email_verified: record.email_verified,
-                    },
-                };
-            }
 
             return session;
         } catch (error) {

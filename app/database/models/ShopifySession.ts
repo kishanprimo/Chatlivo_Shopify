@@ -5,6 +5,8 @@ import {
   Sequelize,
 } from "sequelize";
 
+// Offline (per-shop) sessions only; the app never requests online tokens,
+// so Shopify staff details are not stored
 export interface ShopifySessionAttributes {
   id: string;
   shop: string;
@@ -15,20 +17,6 @@ export interface ShopifySessionAttributes {
   expires?: Date | null;
 
   access_token: string;
-
-  user_id?: bigint | null;
-
-  first_name?: string | null;
-  last_name?: string | null;
-  email?: string | null;
-
-  account_owner: boolean;
-
-  locale?: string | null;
-
-  collaborator: boolean;
-
-  email_verified: boolean;
 
   refresh_token?: string | null;
   refresh_token_expires?: Date | null;
@@ -42,11 +30,6 @@ export interface ShopifySessionCreationAttributes
     ShopifySessionAttributes,
     | "scope"
     | "expires"
-    | "user_id"
-    | "first_name"
-    | "last_name"
-    | "email"
-    | "locale"
     | "refresh_token"
     | "refresh_token_expires"
     | "createdAt"
@@ -69,20 +52,6 @@ export class ShopifySession
   declare expires: Date | null;
 
   declare access_token: string;
-
-  declare user_id: bigint | null;
-
-  declare first_name: string | null;
-  declare last_name: string | null;
-  declare email: string | null;
-
-  declare account_owner: boolean;
-
-  declare locale: string | null;
-
-  declare collaborator: boolean;
-
-  declare email_verified: boolean;
 
   declare refresh_token: string | null;
   declare refresh_token_expires: Date | null;
@@ -132,49 +101,6 @@ export const initShopifySession = (
         allowNull: false,
       },
 
-      user_id: {
-        type: DataTypes.BIGINT,
-        allowNull: true,
-      },
-
-      first_name: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-      },
-
-      last_name: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-      },
-
-      email: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-      },
-
-      account_owner: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: false,
-      },
-
-      locale: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-      },
-
-      collaborator: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: false,
-      },
-
-      email_verified: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: false,
-      },
-
       refresh_token: {
         type: DataTypes.TEXT,
         allowNull: true,
@@ -198,9 +124,6 @@ export const initShopifySession = (
         },
         {
           fields: ["is_online"],
-        },
-        {
-          fields: ["user_id"],
         },
       ],
     },
