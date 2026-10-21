@@ -54,6 +54,10 @@ module.exports = {
           env.CHATLIVO_BACKEND_URL || "https://api.chatlivo.com",
         CHATLIVO_INTERNAL_KEY: env.CHATLIVO_INTERNAL_KEY,
 
+        // Shopify Billing: "true" only on development stores (no real charge)
+        SHOPIFY_BILLING_TEST: env.SHOPIFY_BILLING_TEST || "false",
+        SHOPIFY_APP_HANDLE: env.SHOPIFY_APP_HANDLE || "chatlivo",
+
         // Also baked into the client bundle at build time
         VITE_CHATLIVO_APP_URL: env.VITE_CHATLIVO_APP_URL || "https://chatlivo.com",
       },

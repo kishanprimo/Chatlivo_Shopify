@@ -9,6 +9,10 @@ jobs:
   deploy:
     name: Build & Deploy via SSH
     runs-on: ubuntu-latest
+    env:
+      # The Shopify config deploy (webhooks, scopes, theme embed) runs only
+      # once the SHOPIFY_CLI_PARTNERS_TOKEN repository secret is added
+      HAS_SHOPIFY_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN != '' }}
 
     steps:
       - name: Checkout code
@@ -22,6 +26,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Fail here, before the server is touched, if the app doesn't compile
+      - name: Type-check and build
+        run: |
+          npx tsc --noEmit
+          npm run build
 
       - name: Deploy entire project
         uses: burnett01/rsync-deployments@7.0.1
@@ -51,6 +61,9 @@ jobs:
           port: 22
           envs: SHOPIFY_APP_URL,SHOPIFY_API_KEY,SHOPIFY_API_SECRET,CHATLIVO_BACKEND_URL
           script: |
+            # Stop on the first failure: a failed build must never restart
+            # pm2 without build/server/index.js
+            set -e
             cd /var/www/shopify.chatlivo.com
 
             echo "📦 Installing dependencies..."
@@ -82,3 +95,11 @@ jobs:
             pm2 status
             echo ""
             echo "📊 View logs: pm2 logs shopify-chatlivo"
+
+      # Pushes shopify.app.toml (webhook subscriptions, scopes) and the theme
+      # app embed to Shopify, after the server already serves the new routes
+      - name: Deploy Shopify app configuration
+        if: env.HAS_SHOPIFY_TOKEN == 'true'
+        env:
+          SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
+        run: npx --yes @shopify/cli@4.9.4 app deploy --config shopify.app.toml --allow-updates --message "${{ github.sha }}"

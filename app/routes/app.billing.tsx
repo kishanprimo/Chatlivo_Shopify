@@ -42,6 +42,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     active: active ? { id: active.id, name: active.name } : null,
+    // Sent from here: the component can't import billing.server
+    plans: PLAN_KEYS.map((key) => ({
+      key,
+      amount: PLANS[key].amount,
+      yearly: PLANS[key].billing_cycle === "yearly",
+    })),
+    trialDays: TRIAL_DAYS,
   };
 };
 
@@ -85,7 +92,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Billing() {
-  const { active } = useLoaderData<typeof loader>();
+  const { active, plans, trialDays } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const busy = navigation.state === "submitting";
@@ -98,10 +105,10 @@ export default function Billing() {
           ? `Current plan: ${active.name}`
           : "Current plan: Free (1 agent, 25 conversations / month)"}
       </p>
-      <p>Paid plans start with a {TRIAL_DAYS}-day free trial.</p>
+      <p>Paid plans start with a {trialDays}-day free trial.</p>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 24 }}>
-        {PLAN_KEYS.map((key) => (
+        {plans.map(({ key, amount, yearly }) => (
           <div
             key={key}
             style={{
@@ -113,8 +120,7 @@ export default function Billing() {
           >
             <h3 style={{ margin: 0 }}>{key}</h3>
             <p>
-              ${PLANS[key].amount} /{" "}
-              {PLANS[key].billing_cycle === "yearly" ? "year" : "month"}
+              ${amount} / {yearly ? "year" : "month"}
             </p>
             <Form method="post">
               <input type="hidden" name="plan" value={key} />
