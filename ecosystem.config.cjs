@@ -39,7 +39,7 @@ module.exports = {
         NODE_ENV: env.NODE_ENV || "production",
 
         // Shopify app credentials (Dev Dashboard → Chatlivo → Settings)
-        SHOPIFY_APP_URL: env.SHOPIFY_APP_URL || "https://shopify.chatlivo.com",
+        SHOPIFY_APP_URL: env.SHOPIFY_APP_URL || "https://app.chatlivo.com",
         SHOPIFY_API_KEY: env.SHOPIFY_API_KEY,
         SHOPIFY_API_SECRET: env.SHOPIFY_API_SECRET,
         SCOPES:

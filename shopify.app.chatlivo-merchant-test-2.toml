@@ -2,7 +2,7 @@
 
 client_id = "824f8d7b2318026e09e6235772077692"
 name = "Chatlivo Merchant Test 2"
-application_url = "https://shopify.chatlivo.com"
+application_url = "https://app.chatlivo.com"
 embedded = true
 
 [build]
@@ -22,4 +22,4 @@ use_legacy_install_flow = false
 
 
 [auth]
-redirect_urls = [ "https://shopify.chatlivo.com/auth/callback" ]
+redirect_urls = [ "https://app.chatlivo.com/auth/callback" ]

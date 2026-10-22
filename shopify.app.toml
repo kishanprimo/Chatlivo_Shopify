@@ -2,7 +2,7 @@
 
 client_id = "26949b2c72812ece1834683cf57b9917"
 name = "Chatlivo"
-application_url = "https://shopify.chatlivo.com"
+application_url = "https://app.chatlivo.com"
 embedded = true
 
 [build]
@@ -29,4 +29,4 @@ api_version = "2026-10"
 scopes = "write_metaobject_definitions,write_metaobjects,write_products"
 
 [auth]
-redirect_urls = [ "https://shopify.chatlivo.com/auth/callback" ]
+redirect_urls = [ "https://app.chatlivo.com/auth/callback" ]

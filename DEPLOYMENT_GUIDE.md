@@ -54,7 +54,7 @@ Update `.env` on your production server:
 
 ```env
 # Shopify Configuration
-SHOPIFY_APP_URL=https://shopify.chatlivo.com
+SHOPIFY_APP_URL=https://app.chatlivo.com
 SHOPIFY_API_KEY=your_api_key
 SHOPIFY_API_SECRET=your_api_secret
 SCOPES=write_products,write_metaobjects,write_metaobject_definitions
@@ -169,7 +169,7 @@ tail -f logs/error.log
 
 App should be accessible at:
 ```
-https://shopify.chatlivo.com:3005
+https://app.chatlivo.com:3005
 http://localhost:3005
 ```
 
