@@ -21,7 +21,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # @whatwg-node/fetch needs Node >= 22.15 and .npmrc has engine-strict
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -96,10 +97,10 @@ jobs:
             echo ""
             echo "📊 View logs: pm2 logs shopify-chatlivo"
 
-      # Pushes shopify.app.toml (webhook subscriptions, scopes) and the theme
+      # Pushes shopify.app.primocys.toml (webhook subscriptions, scopes) and the theme
       # app embed to Shopify, after the server already serves the new routes
       - name: Deploy Shopify app configuration
         if: env.HAS_SHOPIFY_TOKEN == 'true'
         env:
           SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
-        run: npx --yes @shopify/cli@4.9.4 app deploy --config shopify.app.toml --allow-updates --message "${{ github.sha }}"
+        run: npx --yes @shopify/cli@4.9.4 app deploy --config shopify.app.primocys.toml --allow-updates --message "${{ github.sha }}"
