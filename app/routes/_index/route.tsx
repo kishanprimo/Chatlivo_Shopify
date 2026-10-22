@@ -21,9 +21,10 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
+        <h1 className={styles.heading}>Live chat and AI support for your Shopify store</h1>
         <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
+          Chatlivo adds a chat widget to your storefront so you can answer
+          shoppers in real time, from one shared inbox.
         </p>
         {showForm && (
           <Form className={styles.form} method="post" action="/auth/login">
@@ -39,16 +40,13 @@ export default function App() {
         )}
         <ul className={styles.list}>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Storefront chat widget</strong>. Switch on the Chatlivo embed in your theme editor and start chatting with visitors on every page.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>AI chatbot</strong>. Answer common questions automatically, around the clock, and hand off to your team when needed.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>One inbox</strong>. Manage website chats and WhatsApp conversations together in your Chatlivo dashboard.
           </li>
         </ul>
       </div>
