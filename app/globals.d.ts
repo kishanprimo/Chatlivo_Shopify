@@ -1,6 +1,4 @@
 declare module "*.css";
-declare module "js-cookie";
-declare module "@tanstack/react-query";
 
 declare namespace JSX {
   interface IntrinsicElements {
