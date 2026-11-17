@@ -3,11 +3,11 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
-  IS_TEST_BILLING,
+  getBillingContext,
   isPlanKey,
   PLAN_KEYS,
   PLANS,
@@ -15,12 +15,23 @@ import {
 } from "../billing.server";
 import { chatlivoBackendFetch } from "../services/chatlivoBackend.server";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
+const FREE_PLAN_LABEL = "Free (1 agent, 25 conversations / month)";
 
+function logBackendError(error: unknown) {
+  console.warn(
+    "Could not reach backend billing API:",
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { admin, billing, session } = await authenticate.admin(request);
+  const { isTest, trialDaysRemaining } = await getBillingContext(admin);
+
+  // Always ask Shopify; a local record is never proof of an active plan
   const { appSubscriptions } = await billing.check({
     plans: PLAN_KEYS,
-    isTest: IS_TEST_BILLING,
+    isTest,
   });
   const active = appSubscriptions[0] ?? null;
 
@@ -36,12 +47,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         billing_cycle: PLANS[active.name].billing_cycle,
       });
     } catch (error) {
-      console.warn("Could not reach backend billing API:", error instanceof Error ? error.message : String(error));
+      logBackendError(error);
     }
   }
 
+  // Shopify adds charge_id to the return URL after the approval page. Only
+  // used to pick the message; the plan shown comes from billing.check above.
+  const returnedFromShopify = new URL(request.url).searchParams.has("charge_id");
+
   return {
     active: active ? { id: active.id, name: active.name } : null,
+    returnResult: returnedFromShopify ? (active ? "approved" : "not_active") : null,
     // Sent from here: the component can't import billing.server
     plans: PLAN_KEYS.map((key) => ({
       key,
@@ -49,32 +65,41 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       yearly: PLANS[key].billing_cycle === "yearly",
     })),
     trialDays: TRIAL_DAYS,
+    trialDaysRemaining,
   };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { billing, session } = await authenticate.admin(request);
+  const { admin, billing, session } = await authenticate.admin(request);
+  const { isTest, trialDaysRemaining } = await getBillingContext(admin);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
-  if (intent === "cancel") {
-    const subscriptionId = String(formData.get("subscription_id") || "");
-    if (!subscriptionId) return { error: "No active plan to cancel." };
+  // The browser never says which subscription is active: read it from Shopify
+  const { appSubscriptions } = await billing.check({ plans: PLAN_KEYS, isTest });
+  const active = appSubscriptions[0] ?? null;
 
-    await billing.cancel({
-      subscriptionId,
-      isTest: IS_TEST_BILLING,
-      prorate: true,
-    });
+  if (intent === "cancel") {
+    if (!active) return { error: "You are already on the Free plan." };
+
+    try {
+      await billing.cancel({ subscriptionId: active.id, isTest, prorate: true });
+    } catch (error) {
+      console.error(
+        `Billing cancel failed for ${session.shop}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+      return { error: "We couldn't cancel your plan. Please try again." };
+    }
 
     try {
       await chatlivoBackendFetch("/shopify/billing", {
         shop_domain: session.shop,
-        shopify_subscription_id: subscriptionId,
+        shopify_subscription_id: active.id,
         status: "CANCELLED",
       });
     } catch (error) {
-      console.warn("Could not reach backend billing API:", error instanceof Error ? error.message : String(error));
+      logBackendError(error);
     }
 
     return { error: null };
@@ -82,78 +107,124 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const plan = formData.get("plan");
   if (!isPlanKey(plan)) return { error: "Unknown plan." };
+  if (active?.name === plan) return { error: "You are already on this plan." };
 
-  // Throws a redirect to Shopify's charge approval page
+  // Redirects to Shopify's approval page. Selecting another plan while one is
+  // active replaces it once the merchant approves.
   return billing.request({
     plan,
-    isTest: IS_TEST_BILLING,
-    returnUrl: `https://admin.shopify.com/store/${session.shop.replace(".myshopify.com", "")}/apps/${process.env.SHOPIFY_APP_HANDLE || "chatlivo"}/app/billing`,
+    isTest,
+    trialDays: trialDaysRemaining,
+    // Uses the client ID, which admin always resolves. The app handle is set
+    // in the Partner Dashboard and a wrong handle here showed admin's 404.
+    returnUrl: `https://admin.shopify.com/store/${session.shop.replace(".myshopify.com", "")}/apps/${process.env.SHOPIFY_API_KEY}/app/billing`,
   });
 };
 
 export default function Billing() {
-  const { active, plans, trialDays } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
-  const busy = navigation.state === "submitting";
+  const { active, returnResult, plans, trialDays, trialDaysRemaining } =
+    useLoaderData<typeof loader>();
+  const fetcher = useFetcher<typeof action>();
+
+  // One request at a time: no duplicate approval pages or charges
+  const busy = fetcher.state !== "idle";
+  const pendingPlan = busy ? fetcher.formData?.get("plan") : null;
+  const cancelling = busy && fetcher.formData?.get("intent") === "cancel";
+
+  const choose = (plan: string) => fetcher.submit({ plan }, { method: "post" });
+  const cancel = () => {
+    if (window.confirm("Cancel your plan and move to Free?")) {
+      fetcher.submit({ intent: "cancel" }, { method: "post" });
+    }
+  };
+
+  const trialNote =
+    trialDaysRemaining >= trialDays
+      ? `Paid plans start with a ${trialDays}-day free trial.`
+      : trialDaysRemaining > 0
+        ? `You have ${trialDaysRemaining} day${trialDaysRemaining === 1 ? "" : "s"} of your free trial left.`
+        : "Your free trial has been used. Paid plans are billed from the day you subscribe.";
 
   return (
-    <div style={{ padding: 40, fontSize: 16, maxWidth: 720 }}>
-      <p style={{ fontSize: 18 }}>Chatlivo plans</p>
-      <p>
-        {active
-          ? `Current plan: ${active.name}`
-          : "Current plan: Free (1 agent, 25 conversations / month)"}
-      </p>
-      <p>Paid plans start with a {trialDays}-day free trial.</p>
+    <s-page heading="Chatlivo plans">
+      {returnResult === "approved" && (
+        <s-banner tone="success" heading="Plan activated">
+          You are now on {active?.name}.
+        </s-banner>
+      )}
+      {returnResult === "not_active" && (
+        <s-banner tone="warning" heading="Plan not activated">
+          The charge was not approved, so you are still on the Free plan. You
+          can choose a plan again at any time.
+        </s-banner>
+      )}
+      {fetcher.data?.error && (
+        <s-banner tone="critical">{fetcher.data.error}</s-banner>
+      )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 24 }}>
-        {plans.map(({ key, amount, yearly }) => (
-          <div
-            key={key}
-            style={{
-              border: "1px solid #ccc",
-              borderRadius: 8,
-              padding: 16,
-              minWidth: 150,
-            }}
-          >
-            <h3 style={{ margin: 0 }}>{key}</h3>
-            <p>
-              ${amount} / {yearly ? "year" : "month"}
-            </p>
-            <Form method="post">
-              <input type="hidden" name="plan" value={key} />
-              <button
-                type="submit"
-                disabled={busy || active?.name === key}
-                style={{ padding: "8px 16px", fontSize: 16 }}
+      <s-section heading="Current plan">
+        <s-stack direction="inline" gap="base" alignItems="center">
+          <s-badge tone={active ? "success" : "neutral"}>
+            {active ? "Active" : "Free"}
+          </s-badge>
+          <s-text>{active?.name ?? FREE_PLAN_LABEL}</s-text>
+        </s-stack>
+        <s-paragraph>{trialNote}</s-paragraph>
+      </s-section>
+
+      <s-section heading="Choose a plan">
+        <s-grid gridTemplateColumns="repeat(auto-fit, minmax(180px, 1fr))" gap="base">
+          {plans.map(({ key, amount, yearly }) => {
+            const current = active?.name === key;
+            return (
+              <s-box
+                key={key}
+                padding="base"
+                border="base"
+                borderRadius="base"
+                background={current ? "subdued" : "base"}
               >
-                {active?.name === key ? "Current plan" : "Choose"}
-              </button>
-            </Form>
-          </div>
-        ))}
-      </div>
+                <s-stack gap="small-200">
+                  <s-stack direction="inline" gap="small-200" alignItems="center">
+                    <s-heading>{key}</s-heading>
+                    {current && <s-badge tone="success">Current</s-badge>}
+                  </s-stack>
+                  <s-text type="strong">
+                    ${amount} / {yearly ? "year" : "month"}
+                  </s-text>
+                  {yearly && <s-text color="subdued">2 months free</s-text>}
+                  <s-button
+                    variant={current ? "secondary" : "primary"}
+                    disabled={busy || current}
+                    loading={pendingPlan === key}
+                    onClick={() => choose(key)}
+                    accessibilityLabel={`Choose ${key}`}
+                  >
+                    {current ? "Current plan" : "Choose"}
+                  </s-button>
+                </s-stack>
+              </s-box>
+            );
+          })}
+        </s-grid>
+      </s-section>
 
       {active && (
-        <Form method="post" style={{ marginTop: 32 }}>
-          <input type="hidden" name="intent" value="cancel" />
-          <input type="hidden" name="subscription_id" value={active.id} />
-          <button
-            type="submit"
+        <s-section heading="Cancel plan">
+          <s-paragraph>
+            Cancelling moves this store back to {FREE_PLAN_LABEL}.
+          </s-paragraph>
+          <s-button
+            tone="critical"
             disabled={busy}
-            style={{ padding: "8px 16px", fontSize: 16 }}
+            loading={cancelling}
+            onClick={cancel}
           >
-            Cancel plan (back to Free)
-          </button>
-        </Form>
+            Cancel plan
+          </s-button>
+        </s-section>
       )}
-
-      {actionData?.error && (
-        <p style={{ color: "#d72c0d", marginTop: 12 }}>{actionData.error}</p>
-      )}
-    </div>
+    </s-page>
   );
 }
 

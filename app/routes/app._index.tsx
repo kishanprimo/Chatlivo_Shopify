@@ -11,7 +11,7 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { IS_TEST_BILLING, PLAN_KEYS } from "../billing.server";
+import { getBillingContext, PLAN_KEYS } from "../billing.server";
 import { chatlivoBackendFetch } from "../services/chatlivoBackend.server";
 
 type Onboarding = {
@@ -74,11 +74,12 @@ async function getShopPayload({ admin, session }: AdminContext) {
 }
 
 // Active Shopify plan name, or null on Free (or if billing can't be read)
-async function getActivePlan({ billing, session }: AdminContext) {
+async function getActivePlan({ admin, billing, session }: AdminContext) {
   try {
+    const { isTest } = await getBillingContext(admin);
     const { appSubscriptions } = await billing.check({
       plans: PLAN_KEYS,
-      isTest: IS_TEST_BILLING,
+      isTest,
     });
     return appSubscriptions[0]?.name ?? null;
   } catch (error) {
