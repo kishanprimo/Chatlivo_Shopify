@@ -3,6 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
+import { useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -102,7 +103,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       logBackendError(error);
     }
 
-    return { error: null };
+    return { error: null, cancelled: true };
   }
 
   const plan = formData.get("plan");
@@ -131,12 +132,17 @@ export default function Billing() {
   const pendingPlan = busy ? fetcher.formData?.get("plan") : null;
   const cancelling = busy && fetcher.formData?.get("intent") === "cancel";
 
+  // Asked in the page itself: Shopify admin's sandboxed iframe blocks
+  // window.confirm(), which made the cancel button silently do nothing
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+
   const choose = (plan: string) => fetcher.submit({ plan }, { method: "post" });
   const cancel = () => {
-    if (window.confirm("Cancel your plan and move to Free?")) {
-      fetcher.submit({ intent: "cancel" }, { method: "post" });
-    }
+    setConfirmingCancel(false);
+    fetcher.submit({ intent: "cancel" }, { method: "post" });
   };
+  const cancelled =
+    fetcher.state === "idle" && fetcher.data && "cancelled" in fetcher.data;
 
   const trialNote =
     trialDaysRemaining >= trialDays
@@ -158,6 +164,11 @@ export default function Billing() {
           can choose a plan again at any time.
         </s-banner>
       )}
+      {cancelled && !active && (
+        <s-banner tone="success" heading="Plan cancelled">
+          This store is now on the Free plan.
+        </s-banner>
+      )}
       {fetcher.data?.error && (
         <s-banner tone="critical">{fetcher.data.error}</s-banner>
       )}
@@ -174,6 +185,29 @@ export default function Billing() {
 
       <s-section heading="Choose a plan">
         <s-grid gridTemplateColumns="repeat(auto-fit, minmax(180px, 1fr))" gap="base">
+          <s-box
+            padding="base"
+            border="base"
+            borderRadius="base"
+            background={active ? "base" : "subdued"}
+          >
+            <s-stack gap="small-200">
+              <s-stack direction="inline" gap="small-200" alignItems="center">
+                <s-heading>Free</s-heading>
+                {!active && <s-badge tone="success">Current</s-badge>}
+              </s-stack>
+              <s-text type="strong">$0</s-text>
+              <s-text color="subdued">1 agent, 25 conversations / month</s-text>
+              <s-button
+                variant="secondary"
+                disabled={busy || !active}
+                onClick={() => setConfirmingCancel(true)}
+                accessibilityLabel="Switch to the Free plan"
+              >
+                {active ? "Switch to Free" : "Current plan"}
+              </s-button>
+            </s-stack>
+          </s-box>
           {plans.map(({ key, amount, yearly }) => {
             const current = active?.name === key;
             return (
@@ -211,17 +245,36 @@ export default function Billing() {
 
       {active && (
         <s-section heading="Cancel plan">
-          <s-paragraph>
-            Cancelling moves this store back to {FREE_PLAN_LABEL}.
-          </s-paragraph>
-          <s-button
-            tone="critical"
-            disabled={busy}
-            loading={cancelling}
-            onClick={cancel}
-          >
-            Cancel plan
-          </s-button>
+          {confirmingCancel ? (
+            <s-stack gap="base">
+              <s-banner tone="warning" heading={`Cancel ${active.name}?`}>
+                This store moves to {FREE_PLAN_LABEL} right away. You can
+                choose a paid plan again at any time.
+              </s-banner>
+              <s-stack direction="inline" gap="base">
+                <s-button tone="critical" variant="primary" onClick={cancel}>
+                  Yes, cancel plan
+                </s-button>
+                <s-button onClick={() => setConfirmingCancel(false)}>
+                  Keep my plan
+                </s-button>
+              </s-stack>
+            </s-stack>
+          ) : (
+            <s-stack gap="base">
+              <s-paragraph>
+                Cancelling moves this store back to {FREE_PLAN_LABEL}.
+              </s-paragraph>
+              <s-button
+                tone="critical"
+                disabled={busy}
+                loading={cancelling}
+                onClick={() => setConfirmingCancel(true)}
+              >
+                Cancel plan
+              </s-button>
+            </s-stack>
+          )}
         </s-section>
       )}
     </s-page>

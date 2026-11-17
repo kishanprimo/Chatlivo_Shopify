@@ -117,6 +117,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     } else {
       onboarding = backendData.data;
     }
+
+    // New store: create its Chatlivo workspace from the shop's details right
+    // away, so the merchant lands in a working app (and the storefront widget
+    // gets its key) without a separate sign-up step
+    if (onboarding.action === "choose") {
+      const signupResponse = await chatlivoBackendFetch(
+        "/shopify/signup",
+        payload,
+      );
+      const signupData = await signupResponse.json().catch(() => null);
+
+      if (signupResponse.ok && signupData?.data?.action) {
+        onboarding = signupData.data;
+      } else {
+        console.error(
+          `Chatlivo auto sign-up failed for ${session.shop}: status ${signupResponse.status}`,
+        );
+      }
+    }
   } catch (error) {
     console.error(
       `Chatlivo onboarding request failed for ${session.shop}:`,
