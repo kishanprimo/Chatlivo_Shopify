@@ -42,9 +42,8 @@ module.exports = {
         SHOPIFY_APP_URL: env.SHOPIFY_APP_URL || "https://app.chatlivo.com",
         SHOPIFY_API_KEY: env.SHOPIFY_API_KEY,
         SHOPIFY_API_SECRET: env.SHOPIFY_API_SECRET,
-        SCOPES:
-          env.SCOPES ||
-          "write_products,write_metaobjects,write_metaobject_definitions",
+        // Must match [access_scopes] in shopify.app.primocys.toml
+        SCOPES: env.SCOPES || "read_products",
 
         // Shopify session storage
         DATABASE_URL: env.DATABASE_URL,

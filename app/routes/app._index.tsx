@@ -12,6 +12,11 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getBillingContext, PLAN_KEYS } from "../billing.server";
+import {
+  countProducts,
+  searchProducts,
+  type ProductSummary,
+} from "../services/products.server";
 import { chatlivoBackendFetch } from "../services/chatlivoBackend.server";
 
 type Onboarding = {
@@ -157,11 +162,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     dashboardUrl = `${import.meta.env.VITE_CHATLIVO_APP_URL}/shopify-login?${params.toString()}`;
   }
 
+  // The store's catalog, which agents share in chats from the Chatlivo inbox
+  let products: { count: number; items: ProductSummary[] } | null = null;
+  if (onboarding.action === "login") {
+    try {
+      const [count, items] = await Promise.all([
+        countProducts(context.admin),
+        searchProducts(context.admin, "", 5, session.shop),
+      ]);
+      products = { count, items };
+    } catch (error) {
+      console.error(
+        `Product preview failed for ${session.shop}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
   return {
     status: onboarding.action ?? "error",
     message: onboarding.message ?? null,
     dashboardUrl,
     activePlan,
+    products,
     // shopify:// links are handled by App Bridge and stay inside admin
     themeEditorUrl: `shopify://admin/themes/current/editor?context=apps&activateAppId=${process.env.SHOPIFY_API_KEY}/${WIDGET_EMBED_HANDLE}`,
   };
@@ -238,7 +261,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function AppIndex() {
-  const { status, message, dashboardUrl, activePlan, themeEditorUrl } =
+  const { status, message, dashboardUrl, activePlan, themeEditorUrl, products } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
 
@@ -270,6 +293,50 @@ export default function AppIndex() {
             Turn on chat widget
           </s-button>
         </s-section>
+
+        {products && (
+          <s-section heading="Products in chat">
+            <s-paragraph>
+              {products.count === 1
+                ? "1 active product"
+                : `${products.count} active products`}{" "}
+              from your store can be shared with shoppers. In the Chatlivo
+              inbox, click the product button in a chat, search, and send the
+              product with its price and link.
+            </s-paragraph>
+            {products.items.length > 0 ? (
+              <s-stack gap="small-200">
+                {products.items.map((product) => (
+                  <s-stack
+                    key={product.id}
+                    direction="inline"
+                    gap="base"
+                    alignItems="center"
+                  >
+                    {product.image && (
+                      <s-thumbnail
+                        src={product.image}
+                        alt={product.title}
+                        size="small"
+                      />
+                    )}
+                    <s-text>{product.title}</s-text>
+                    <s-text color="subdued">
+                      {product.price} {product.currency}
+                    </s-text>
+                    {!product.available && (
+                      <s-badge tone="warning">Out of stock</s-badge>
+                    )}
+                  </s-stack>
+                ))}
+              </s-stack>
+            ) : (
+              <s-paragraph>
+                Add products in Shopify and they appear here.
+              </s-paragraph>
+            )}
+          </s-section>
+        )}
 
         <s-section heading="Plan">
           <s-paragraph>

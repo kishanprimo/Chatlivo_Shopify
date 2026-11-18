@@ -7,7 +7,9 @@ name = "Chatlivo"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_metaobject_definitions,write_metaobjects,write_products"
+# read_products: product picker in the Chatlivo inbox and the app home page.
+# The widget's app-data metafields need no scope.
+scopes = "read_products"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
