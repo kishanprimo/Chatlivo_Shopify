@@ -6,7 +6,6 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 
 import { SequelizeSessionStorage } from "./shopify/SequelizeSessionStorage";
-import { billingConfig } from "./billing.server";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -18,7 +17,7 @@ const shopify = shopifyApp({
 
   sessionStorage: new SequelizeSessionStorage(),
   distribution: AppDistribution.AppStore,
-  billing: billingConfig,
+  // No Shopify Billing: plans are bought and managed on chatlivo.com
   future: {
     expiringOfflineAccessTokens: true,
   },

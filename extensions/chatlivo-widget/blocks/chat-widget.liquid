@@ -5,7 +5,11 @@
 {%- assign widget_key = app.metafields.chatlivo.widget_key.value -%}
 {%- assign widget_url = app.metafields.chatlivo.widget_url.value -%}
 {%- if widget_key != blank and widget_url != blank -%}
-  <script async src="{{ widget_url }}/loader.js" data-key="{{ widget_key }}"></script>
+  {%- comment -%}
+    data-shop: the widget verifies against the connected store, so it shows on
+    the .myshopify.com host, custom domains and theme previews alike.
+  {%- endcomment -%}
+  <script async src="{{ widget_url }}/loader.js" data-key="{{ widget_key }}" data-shop="{{ shop.permanent_domain }}"></script>
 {%- else -%}
   <!-- Chatlivo: store not connected to a Chatlivo account yet -->
 {%- endif -%}

@@ -23,10 +23,6 @@ api_version = "2026-10"
   uri = "/webhooks/app/uninstalled"
   topics = [ "app/uninstalled" ]
 
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/app_subscriptions/update"
-  topics = [ "app_subscriptions/update" ]
-
   # Mandatory GDPR compliance webhooks (required for App Store review)
   [[webhooks.subscriptions]]
   uri = "/webhooks/compliance"
