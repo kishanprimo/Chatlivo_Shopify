@@ -11,156 +11,63 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { getBillingContext, PLAN_KEYS } from "../billing.server";
 import {
   countProducts,
   searchProducts,
   type ProductSummary,
 } from "../services/products.server";
 import { chatlivoBackendFetch } from "../services/chatlivoBackend.server";
+import {
+  dashboardLoginUrl,
+  getOnboarding,
+  getShopPayload,
+} from "../services/onboarding.server";
 
-type Onboarding = {
-  action?: string;
-  message?: string;
-  token?: string;
-  is_user_verified?: boolean;
-  is_setup_complete?: boolean;
-  organization_id?: number;
-  chatbot_id?: number | null;
-};
+// One line of the "Chatlivo on your store" card: title + status badge,
+// explanation, optional action on the right
+function StatusRow({
+  title,
+  badge,
+  text,
+  action,
+}: {
+  title: string;
+  badge: React.ReactNode;
+  text: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <s-stack direction="inline" gap="base" justifyContent="space-between" alignItems="center">
+      <s-stack gap="small-200">
+        <s-stack direction="inline" gap="small-200" alignItems="center">
+          <s-text type="strong">{title}</s-text>
+          {badge}
+        </s-stack>
+        <s-text color="subdued">{text}</s-text>
+      </s-stack>
+      {action}
+    </s-stack>
+  );
+}
 
-type AdminContext = Awaited<ReturnType<typeof authenticate.admin>>;
+// "today", "yesterday" or "on 12 Nov"
+function formatSeen(iso: string) {
+  const seen = new Date(iso);
+  const days = Math.floor((Date.now() - seen.getTime()) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return `on ${seen.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+}
 
 // Theme app embed block: extensions/chatlivo-widget/blocks/chat-widget.liquid
 const WIDGET_EMBED_HANDLE = "chat-widget";
-
-// Shop details + offline token, as the Chatlivo backend expects them
-async function getShopPayload({ admin, session }: AdminContext) {
-  const shopResponse = await admin.graphql(`
-    query GetShop {
-      shop {
-        id
-        name
-        email
-        myshopifyDomain
-        currencyCode
-        timezoneAbbreviation
-        shopOwnerName
-
-        billingAddress {
-          country
-        }
-
-        plan {
-          displayName
-        }
-      }
-    }
-  `);
-
-  const shopResult = await shopResponse.json();
-  const shop = shopResult.data.shop;
-
-  return {
-    shop,
-    payload: {
-      shop_domain: shop.myshopifyDomain,
-      shop_name: shop.name,
-      email: shop.email,
-      owner: shop.shopOwnerName,
-      currency: shop.currencyCode,
-      country: shop.billingAddress?.country,
-      timezone: shop.timezoneAbbreviation,
-      plan: shop.plan?.displayName,
-      access_token: session.accessToken,
-      scope: session.scope,
-    },
-  };
-}
-
-// Active Shopify plan name, or null on Free (or if billing can't be read)
-async function getActivePlan({ admin, billing, session }: AdminContext) {
-  try {
-    const { isTest } = await getBillingContext(admin);
-    const { appSubscriptions } = await billing.check({
-      plans: PLAN_KEYS,
-      isTest,
-    });
-    return appSubscriptions[0]?.name ?? null;
-  } catch (error) {
-    console.error(
-      `Billing check failed for ${session.shop}:`,
-      error instanceof Error ? error.message : String(error),
-    );
-    return null;
-  }
-}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const context = await authenticate.admin(request);
   const { session } = context;
 
-  const activePlan = await getActivePlan(context);
-
-  // Never log the request or response: they carry the Shopify access token
-  // and a Chatlivo login token.
-  let onboarding: Onboarding;
-  try {
-    const { payload } = await getShopPayload(context);
-    const backendResponse = await chatlivoBackendFetch(
-      "/shopify/onboarding",
-      payload,
-    );
-
-    const backendData = await backendResponse.json().catch(() => null);
-
-    if (!backendResponse.ok || !backendData?.data) {
-      console.error(
-        `Chatlivo onboarding failed for ${session.shop}: status ${backendResponse.status}`,
-      );
-      onboarding = { action: "error" };
-    } else {
-      onboarding = backendData.data;
-    }
-
-    // New store: create its Chatlivo workspace from the shop's details right
-    // away, so the merchant lands in a working app (and the storefront widget
-    // gets its key) without a separate sign-up step
-    if (onboarding.action === "choose") {
-      const signupResponse = await chatlivoBackendFetch(
-        "/shopify/signup",
-        payload,
-      );
-      const signupData = await signupResponse.json().catch(() => null);
-
-      if (signupResponse.ok && signupData?.data?.action) {
-        onboarding = signupData.data;
-      } else {
-        console.error(
-          `Chatlivo auto sign-up failed for ${session.shop}: status ${signupResponse.status}`,
-        );
-      }
-    }
-  } catch (error) {
-    console.error(
-      `Chatlivo onboarding request failed for ${session.shop}:`,
-      error instanceof Error ? error.message : String(error),
-    );
-    onboarding = { action: "error" };
-  }
-
-  // Only the one-time login link leaves the server, never the raw response
-  let dashboardUrl: string | null = null;
-  if (onboarding.action === "login") {
-    const params = new URLSearchParams({
-      token: onboarding.token ?? "",
-      verified: String(onboarding.is_user_verified),
-      setup: String(onboarding.is_setup_complete),
-      organization_id: String(onboarding.organization_id),
-      chatbot_id: String(onboarding.chatbot_id ?? ""),
-    });
-    dashboardUrl = `${import.meta.env.VITE_CHATLIVO_APP_URL}/shopify-login?${params.toString()}`;
-  }
+  const onboarding = await getOnboarding(context);
+  const dashboardUrl = dashboardLoginUrl(onboarding);
 
   // The store's catalog, which agents share in chats from the Chatlivo inbox
   let products: { count: number; items: ProductSummary[] } | null = null;
@@ -183,8 +90,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     status: onboarding.action ?? "error",
     message: onboarding.message ?? null,
     dashboardUrl,
-    activePlan,
     products,
+    // Last time the storefront loaded the widget via the theme embed (from
+    // chatlivo-api; null when not seen in the last 30 days)
+    widgetSeenAt: onboarding.widget_last_seen_at ?? null,
     // shopify:// links are handled by App Bridge and stay inside admin
     themeEditorUrl: `shopify://admin/themes/current/editor?context=apps&activateAppId=${process.env.SHOPIFY_API_KEY}/${WIDGET_EMBED_HANDLE}`,
   };
@@ -261,8 +170,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function AppIndex() {
-  const { status, message, dashboardUrl, activePlan, themeEditorUrl, products } =
-    useLoaderData<typeof loader>();
+  const {
+    status,
+    message,
+    dashboardUrl,
+    themeEditorUrl,
+    products,
+    widgetSeenAt,
+  } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
 
   const submittingIntent =
@@ -277,21 +192,41 @@ export default function AppIndex() {
   if (status === "login") {
     return (
       <s-page heading="Chatlivo">
-        <s-section heading="Store connection">
-          <s-stack direction="inline" gap="base" alignItems="center">
-            <s-badge tone="success">Connected</s-badge>
-            <s-text>This store is connected to your Chatlivo account.</s-text>
-          </s-stack>
-        </s-section>
+        <s-section heading="Chatlivo on your store">
+          <s-stack gap="base">
+            <StatusRow
+              title="Store connection"
+              badge={<s-badge tone="success">Connected</s-badge>}
+              text="This store is connected to your Chatlivo account."
+            />
 
-        <s-section heading="Chat widget">
-          <s-paragraph>
-            Turn on the Chatlivo embed in your theme editor, then save the
-            theme. The chat widget then shows on every page of your store.
-          </s-paragraph>
-          <s-button variant="primary" href={themeEditorUrl} target="_top">
-            Turn on chat widget
-          </s-button>
+            <s-divider />
+
+            <StatusRow
+              title="Chat widget"
+              badge={
+                widgetSeenAt ? (
+                  <s-badge tone="success">Detected</s-badge>
+                ) : (
+                  <s-badge tone="warning">Not detected</s-badge>
+                )
+              }
+              text={
+                widgetSeenAt
+                  ? `The chat widget last loaded on your storefront ${formatSeen(widgetSeenAt)}. Shoppers can chat with you from every page.`
+                  : "Chatlivo has not detected the chat widget on your store yet. Turn on the Chatlivo app embed in your theme and save, then open your store."
+              }
+              action={
+                <s-button
+                  variant={widgetSeenAt ? "secondary" : "primary"}
+                  href={themeEditorUrl}
+                  target="_top"
+                >
+                  {widgetSeenAt ? "Open theme editor" : "Turn on in theme"}
+                </s-button>
+              }
+            />
+          </s-stack>
         </s-section>
 
         {products && (
@@ -337,14 +272,6 @@ export default function AppIndex() {
             )}
           </s-section>
         )}
-
-        <s-section heading="Plan">
-          <s-paragraph>
-            Current plan:{" "}
-            {activePlan ?? "Free (1 agent, 25 conversations / month)"}
-          </s-paragraph>
-          <s-button href="/app/billing">View plans</s-button>
-        </s-section>
 
         <s-section heading="Conversations">
           <s-paragraph>

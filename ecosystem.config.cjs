@@ -53,10 +53,6 @@ module.exports = {
           env.CHATLIVO_BACKEND_URL || "https://api.chatlivo.com",
         CHATLIVO_INTERNAL_KEY: env.CHATLIVO_INTERNAL_KEY,
 
-        // Shopify Billing: "true" forces test charges on every store.
-        // Development stores get test charges automatically.
-        SHOPIFY_BILLING_TEST: env.SHOPIFY_BILLING_TEST || "false",
-
         // Also baked into the client bundle at build time
         VITE_CHATLIVO_APP_URL: env.VITE_CHATLIVO_APP_URL || "https://chatlivo.com",
       },
