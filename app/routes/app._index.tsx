@@ -189,9 +189,20 @@ export default function AppIndex() {
     <s-banner tone="critical">{fetcher.data.error}</s-banner>
   );
 
+  const connectExisting = (
+    <ConnectExisting
+      connected={status === "login"}
+      connectUrl={fetcher.data?.connectUrl}
+      submitting={submittingIntent === "connect"}
+      disabled={submittingIntent != null}
+      onConnect={() => submit("connect")}
+    />
+  );
+
   if (status === "login") {
     return (
       <s-page heading="Chatlivo">
+        {errorBanner}
         <s-section heading="Chatlivo on your store">
           <s-stack gap="base">
             <StatusRow
@@ -284,6 +295,8 @@ export default function AppIndex() {
             </s-button>
           )}
         </s-section>
+
+        {connectExisting}
       </s-page>
     );
   }
@@ -299,51 +312,10 @@ export default function AppIndex() {
     );
   }
 
-  const connectUrl = fetcher.data?.connectUrl;
-
-  const connectExisting = (
-    <s-section heading="Already have a Chatlivo account?">
-      <s-paragraph>
-        Log in to Chatlivo in a new tab and confirm this store. It takes one
-        click if you are already logged in.
-      </s-paragraph>
-      {connectUrl ? (
-        <s-stack gap="base">
-          <s-button variant="primary" href={connectUrl} target="_blank">
-            Open Chatlivo to confirm
-          </s-button>
-          <s-paragraph>
-            After confirming, come back here and reload this page.
-          </s-paragraph>
-        </s-stack>
-      ) : (
-        <s-button
-          onClick={() => submit("connect")}
-          loading={submittingIntent === "connect"}
-          disabled={submittingIntent != null}
-        >
-          Connect existing Chatlivo account
-        </s-button>
-      )}
-    </s-section>
-  );
-
-  if (status === "link_required") {
-    return (
-      <s-page heading="Connect this store to Chatlivo">
-        {errorBanner}
-        <s-banner tone="info">
-          {message ||
-            "A Chatlivo account already exists for this store's email. Log in to Chatlivo to connect this store."}
-        </s-banner>
-        {connectExisting}
-      </s-page>
-    );
-  }
-
   return (
     <s-page heading="Connect this store to Chatlivo">
       {errorBanner}
+      {message && <s-banner tone="info">{message}</s-banner>}
       <s-section heading="New to Chatlivo?">
         <s-paragraph>
           Create a free Chatlivo account for this store.
@@ -359,6 +331,46 @@ export default function AppIndex() {
       </s-section>
       {connectExisting}
     </s-page>
+  );
+}
+
+// "Already have a Chatlivo account?": the store admin starts it here, a
+// logged-in Chatlivo owner/admin confirms it on chatlivo.com (one-time code)
+function ConnectExisting({
+  connected,
+  connectUrl,
+  submitting,
+  disabled,
+  onConnect,
+}: {
+  connected: boolean;
+  connectUrl: string | null | undefined;
+  submitting: boolean;
+  disabled: boolean;
+  onConnect: () => void;
+}) {
+  return (
+    <s-section heading="Already have a Chatlivo account?">
+      <s-paragraph>
+        {connected
+          ? "This store got its own Chatlivo workspace when you installed the app. To use a Chatlivo account you already have instead, log in to it in a new tab and confirm this store. The store and its chat widget then switch to that account."
+          : "Log in to Chatlivo in a new tab and confirm this store. It takes one click if you are already logged in."}
+      </s-paragraph>
+      {connectUrl ? (
+        <s-stack gap="base">
+          <s-button variant="primary" href={connectUrl} target="_blank">
+            Open Chatlivo to confirm
+          </s-button>
+          <s-paragraph>
+            After confirming, come back here and reload this page.
+          </s-paragraph>
+        </s-stack>
+      ) : (
+        <s-button onClick={onConnect} loading={submitting} disabled={disabled}>
+          Connect existing Chatlivo account
+        </s-button>
+      )}
+    </s-section>
   );
 }
 
