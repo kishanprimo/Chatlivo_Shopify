@@ -8,8 +8,10 @@ name = "Chatlivo"
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # read_products: product picker in the Chatlivo inbox and the app home page.
+# read_themes: setup checklist checks whether the Chatlivo app embed is on in
+# the live theme (config/settings_data.json); nothing is ever written.
 # The widget's app-data metafields need no scope.
-scopes = "read_products"
+scopes = "read_products,read_themes"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 

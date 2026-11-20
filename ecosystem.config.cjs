@@ -43,7 +43,7 @@ module.exports = {
         SHOPIFY_API_KEY: env.SHOPIFY_API_KEY,
         SHOPIFY_API_SECRET: env.SHOPIFY_API_SECRET,
         // Must match [access_scopes] in shopify.app.primocys.toml
-        SCOPES: env.SCOPES || "read_products",
+        SCOPES: env.SCOPES || "read_products,read_themes",
 
         // Shopify session storage
         DATABASE_URL: env.DATABASE_URL,

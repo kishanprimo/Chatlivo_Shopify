@@ -12,6 +12,10 @@ export type Onboarding = {
   organization_id?: number;
   chatbot_id?: number | null;
   widget_last_seen_at?: string | null;
+  // "login" only: the connected Chatlivo workspace
+  organization?: { name?: string | null } | null;
+  // "choose" only: the store email already has a Chatlivo account
+  existing_account?: boolean;
 };
 
 // Shop details + offline token, as the Chatlivo backend expects them
@@ -59,9 +63,8 @@ export async function getShopPayload({ admin, session }: AdminContext) {
 }
 
 // This store's Chatlivo account ("login" with a one-time token when
-// connected). A new store gets its workspace created right away, so the
-// merchant lands in a working app (and the storefront widget gets its key)
-// without a separate sign-up step.
+// connected). A store that is not connected yet gets "choose": the merchant
+// logs in to an existing Chatlivo account or creates one (as in Tidio).
 // Never log the request or response: they carry the Shopify access token and
 // a Chatlivo login token.
 export async function getOnboarding(context: AdminContext): Promise<Onboarding> {
@@ -75,33 +78,14 @@ export async function getOnboarding(context: AdminContext): Promise<Onboarding> 
 
     const backendData = await backendResponse.json().catch(() => null);
 
-    let onboarding: Onboarding;
     if (!backendResponse.ok || !backendData?.data) {
       console.error(
         `Chatlivo onboarding failed for ${session.shop}: status ${backendResponse.status}`,
       );
-      onboarding = { action: "error" };
-    } else {
-      onboarding = backendData.data;
+      return { action: "error" };
     }
 
-    if (onboarding.action === "choose") {
-      const signupResponse = await chatlivoBackendFetch(
-        "/shopify/signup",
-        payload,
-      );
-      const signupData = await signupResponse.json().catch(() => null);
-
-      if (signupResponse.ok && signupData?.data?.action) {
-        onboarding = signupData.data;
-      } else {
-        console.error(
-          `Chatlivo auto sign-up failed for ${session.shop}: status ${signupResponse.status}`,
-        );
-      }
-    }
-
-    return onboarding;
+    return backendData.data;
   } catch (error) {
     console.error(
       `Chatlivo onboarding request failed for ${session.shop}:`,

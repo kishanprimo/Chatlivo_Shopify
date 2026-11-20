@@ -3,10 +3,12 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
+import { useEffect } from "react";
 import {
   isRouteErrorResponse,
   useFetcher,
   useLoaderData,
+  useRevalidator,
   useRouteError,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -22,6 +24,10 @@ import {
   getOnboarding,
   getShopPayload,
 } from "../services/onboarding.server";
+import {
+  isWidgetEmbedEnabled,
+  WIDGET_EMBED_HANDLE,
+} from "../services/theme.server";
 
 // One line of the "Chatlivo on your store" card: title + status badge,
 // explanation, optional action on the right
@@ -59,9 +65,6 @@ function formatSeen(iso: string) {
   return `on ${seen.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
 }
 
-// Theme app embed block: extensions/chatlivo-widget/blocks/chat-widget.liquid
-const WIDGET_EMBED_HANDLE = "chat-widget";
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const context = await authenticate.admin(request);
   const { session } = context;
@@ -69,26 +72,41 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const onboarding = await getOnboarding(context);
   const dashboardUrl = dashboardLoginUrl(onboarding);
 
-  // The store's catalog, which agents share in chats from the Chatlivo inbox
+  // The store's catalog, which agents share in chats from the Chatlivo inbox,
+  // and whether the app embed is on in the live theme (setup step 2)
   let products: { count: number; items: ProductSummary[] } | null = null;
+  let embedEnabled: boolean | null = null;
   if (onboarding.action === "login") {
-    try {
-      const [count, items] = await Promise.all([
+    const [productsResult, embedResult] = await Promise.allSettled([
+      Promise.all([
         countProducts(context.admin),
         searchProducts(context.admin, "", 5, session.shop),
-      ]);
+      ]),
+      isWidgetEmbedEnabled(context.admin),
+    ]);
+
+    if (productsResult.status === "fulfilled") {
+      const [count, items] = productsResult.value;
       products = { count, items };
-    } catch (error) {
+    } else {
       console.error(
         `Product preview failed for ${session.shop}:`,
-        error instanceof Error ? error.message : String(error),
+        productsResult.reason instanceof Error
+          ? productsResult.reason.message
+          : String(productsResult.reason),
       );
     }
+    if (embedResult.status === "fulfilled") embedEnabled = embedResult.value;
   }
 
   return {
     status: onboarding.action ?? "error",
     message: onboarding.message ?? null,
+    existingAccount: onboarding.existing_account === true,
+    workspaceName: onboarding.organization?.name ?? null,
+    storeUrl: `https://${session.shop}`,
+    // true/false from the live theme; null when it could not be read
+    embedEnabled,
     dashboardUrl,
     products,
     // Last time the storefront loaded the widget via the theme embed (from
@@ -173,12 +191,49 @@ export default function AppIndex() {
   const {
     status,
     message,
+    existingAccount,
+    workspaceName,
+    storeUrl,
+    embedEnabled,
     dashboardUrl,
     themeEditorUrl,
     products,
     widgetSeenAt,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const revalidator = useRevalidator();
+
+  // Waiting for the merchant to log in on chatlivo.com and confirm the
+  // store: re-check every few seconds, so the page switches to "connected"
+  // on its own (stops after 15 minutes, when the connect link expires)
+  const waitingForConfirm =
+    status !== "login" && Boolean(fetcher.data?.connectUrl);
+  useEffect(() => {
+    if (!waitingForConfirm) return;
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - startedAt > 15 * 60_000) {
+        clearInterval(timer);
+        return;
+      }
+      if (revalidator.state === "idle") revalidator.revalidate();
+    }, 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waitingForConfirm]);
+
+  // Back from the theme editor, the store or chatlivo.com: re-check the
+  // setup steps so their status updates without a reload
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && revalidator.state === "idle") {
+        revalidator.revalidate();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submittingIntent =
     fetcher.state !== "idle" ? fetcher.formData?.get("intent") : null;
@@ -200,40 +255,76 @@ export default function AppIndex() {
   );
 
   if (status === "login") {
+    // Step 2 uses the live theme when it can be read, otherwise the
+    // storefront heartbeat (the widget only loads when the embed is on)
+    const embedOn =
+      embedEnabled === true || (embedEnabled === null && Boolean(widgetSeenAt));
+    const liveOnStore = Boolean(widgetSeenAt);
+    const doneBadge = <s-badge tone="success">Done</s-badge>;
+
     return (
-      <s-page heading="Chatlivo">
+      <s-page heading="Welcome to Chatlivo">
         {errorBanner}
-        <s-section heading="Chatlivo on your store">
+        {!embedOn && (
+          <s-banner tone="warning" heading="Chat widget is not live yet">
+            Turn on the Chatlivo app embed in your theme and click Save, so
+            shoppers can see the chat on your store.
+          </s-banner>
+        )}
+        <s-section heading="Set up your chat">
           <s-stack gap="base">
             <StatusRow
-              title="Store connection"
-              badge={<s-badge tone="success">Connected</s-badge>}
-              text="This store is connected to your Chatlivo account."
+              title="1. Connect your Chatlivo account"
+              badge={doneBadge}
+              text={
+                workspaceName
+                  ? `Connected to the Chatlivo workspace "${workspaceName}".`
+                  : "This store is connected to your Chatlivo account."
+              }
             />
 
             <s-divider />
 
             <StatusRow
-              title="Chat widget"
+              title="2. Turn on Chatlivo in your theme"
               badge={
-                widgetSeenAt ? (
-                  <s-badge tone="success">Detected</s-badge>
-                ) : (
-                  <s-badge tone="warning">Not detected</s-badge>
-                )
+                embedOn ? doneBadge : <s-badge tone="warning">Off</s-badge>
               }
               text={
-                widgetSeenAt
-                  ? `The chat widget last loaded on your storefront ${formatSeen(widgetSeenAt)}. Shoppers can chat with you from every page.`
-                  : "Chatlivo has not detected the chat widget on your store yet. Turn on the Chatlivo app embed in your theme and save, then open your store."
+                embedOn
+                  ? "The Chatlivo app embed is on in your live theme."
+                  : "Click the button: the theme editor opens with Chatlivo switched on. Click Save there, then come back here."
               }
               action={
                 <s-button
-                  variant={widgetSeenAt ? "secondary" : "primary"}
+                  variant={embedOn ? "secondary" : "primary"}
                   href={themeEditorUrl}
                   target="_top"
                 >
-                  {widgetSeenAt ? "Open theme editor" : "Turn on in theme"}
+                  {embedOn ? "Open theme editor" : "Turn on in theme editor"}
+                </s-button>
+              }
+            />
+
+            <s-divider />
+
+            <StatusRow
+              title="3. Check your live store"
+              badge={
+                liveOnStore ? (
+                  <s-badge tone="success">Widget detected</s-badge>
+                ) : (
+                  <s-badge>To do</s-badge>
+                )
+              }
+              text={
+                liveOnStore
+                  ? `The chat widget last loaded on your store ${formatSeen(widgetSeenAt!)}. Shoppers can chat with you from every page.`
+                  : "Open your store and wait a moment: the chat button appears in the corner. Send a test message and it arrives in your Chatlivo inbox."
+              }
+              action={
+                <s-button href={storeUrl} target="_blank">
+                  Open store
                 </s-button>
               }
             />
@@ -284,10 +375,11 @@ export default function AppIndex() {
           </s-section>
         )}
 
-        <s-section heading="Conversations">
+        <s-section heading="Next steps">
           <s-paragraph>
-            Reply to shoppers and set up your chatbot in the Chatlivo
-            dashboard.
+            Reply to shoppers from the Chatlivo dashboard or the Chatlivo
+            mobile app. In the dashboard you can also set up AI answers,
+            business hours and the look of your chat widget.
           </s-paragraph>
           {dashboardUrl && (
             <s-button href={dashboardUrl} target="_blank">
@@ -312,24 +404,67 @@ export default function AppIndex() {
     );
   }
 
+  // Not connected yet (as in Tidio): log in to an existing Chatlivo account
+  // on chatlivo.com, or create a free account right here
+  const connectUrl = fetcher.data?.connectUrl;
+
   return (
-    <s-page heading="Connect this store to Chatlivo">
+    <s-page heading="Set up Chatlivo">
       {errorBanner}
       {message && <s-banner tone="info">{message}</s-banner>}
-      <s-section heading="New to Chatlivo?">
-        <s-paragraph>
-          Create a free Chatlivo account for this store.
-        </s-paragraph>
-        <s-button
-          variant="primary"
-          onClick={() => submit("signup")}
-          loading={submittingIntent === "signup"}
-          disabled={submittingIntent != null}
-        >
-          Create a Chatlivo account
-        </s-button>
+      <s-section heading="Connect your store to Chatlivo">
+        <s-stack gap="base">
+          <s-paragraph>
+            Chatlivo adds live chat and an AI chatbot to your store. Log in
+            to your Chatlivo account, or create a free one, to finish setup.
+          </s-paragraph>
+
+          {existingAccount && !connectUrl && (
+            <s-banner tone="info">
+              This store&apos;s email already has a Chatlivo account. Log in
+              to connect this store to it.
+            </s-banner>
+          )}
+
+          {connectUrl ? (
+            <s-stack gap="base">
+              <s-button variant="primary" href={connectUrl} target="_blank">
+                Continue to Chatlivo
+              </s-button>
+              <s-paragraph>
+                Log in on chatlivo.com and confirm this store. This page
+                updates by itself once the store is connected.
+              </s-paragraph>
+            </s-stack>
+          ) : (
+            <s-stack direction="inline" gap="base">
+              <s-button
+                variant={existingAccount ? "primary" : "secondary"}
+                onClick={() => submit("connect")}
+                loading={submittingIntent === "connect"}
+                disabled={submittingIntent != null}
+              >
+                Log in to Chatlivo
+              </s-button>
+              <s-button
+                variant={existingAccount ? "secondary" : "primary"}
+                onClick={() => submit("signup")}
+                loading={submittingIntent === "signup"}
+                disabled={submittingIntent != null}
+              >
+                Create a free account
+              </s-button>
+            </s-stack>
+          )}
+
+          {!connectUrl && (
+            <s-paragraph>
+              A new account uses this store&apos;s email, and your store is
+              set as its website.
+            </s-paragraph>
+          )}
+        </s-stack>
       </s-section>
-      {connectExisting}
     </s-page>
   );
 }
@@ -353,7 +488,7 @@ function ConnectExisting({
     <s-section heading="Already have a Chatlivo account?">
       <s-paragraph>
         {connected
-          ? "This store got its own Chatlivo workspace when you installed the app. To use a Chatlivo account you already have instead, log in to it in a new tab and confirm this store. The store and its chat widget then switch to that account."
+          ? "To move this store to another Chatlivo account, log in to that account in a new tab and confirm this store. The store and its chat widget then switch to that account."
           : "Log in to Chatlivo in a new tab and confirm this store. It takes one click if you are already logged in."}
       </s-paragraph>
       {connectUrl ? (
