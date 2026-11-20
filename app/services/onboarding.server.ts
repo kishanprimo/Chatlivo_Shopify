@@ -95,6 +95,39 @@ export async function getOnboarding(context: AdminContext): Promise<Onboarding> 
   }
 }
 
+// chatlivo.com page that connects this store to the Chatlivo account the
+// merchant logs in to or registers there (one-time token, valid 1 hour).
+// Null when the token could not be created.
+export async function chatlivoConnectUrl(
+  context: AdminContext,
+): Promise<string | null> {
+  try {
+    const { payload } = await getShopPayload(context);
+    const response = await chatlivoBackendFetch(
+      "/shopify/connect-token",
+      payload,
+    );
+    const data = await response.json().catch(() => null);
+    const token = data?.data?.token;
+
+    if (!response.ok || !token) {
+      console.error(
+        `Chatlivo connect token failed for ${context.session.shop}: status ${response.status}`,
+      );
+      return null;
+    }
+
+    const params = new URLSearchParams({ token });
+    return `${import.meta.env.VITE_CHATLIVO_APP_URL}/shopify/connect?${params.toString()}`;
+  } catch (error) {
+    console.error(
+      `Chatlivo connect token request failed for ${context.session.shop}:`,
+      error instanceof Error ? error.message : String(error),
+    );
+    return null;
+  }
+}
+
 // One-time login link into the Chatlivo dashboard; "next" must be one of the
 // paths the dashboard's /shopify-login page allowlists. Only this link leaves
 // the server, never the raw onboarding response.

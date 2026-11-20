@@ -18,11 +18,10 @@ import {
   searchProducts,
   type ProductSummary,
 } from "../services/products.server";
-import { chatlivoBackendFetch } from "../services/chatlivoBackend.server";
 import {
+  chatlivoConnectUrl,
   dashboardLoginUrl,
   getOnboarding,
-  getShopPayload,
 } from "../services/onboarding.server";
 import {
   isWidgetEmbedEnabled,
@@ -70,6 +69,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = context;
 
   const onboarding = await getOnboarding(context);
+
+  // Not connected yet: the merchant logs in or registers on chatlivo.com,
+  // which connects this store and sends them back here. Leaves the admin
+  // iframe (target _top).
+  if (onboarding.action === "choose") {
+    const connectUrl = await chatlivoConnectUrl(context);
+    if (connectUrl) throw context.redirect(connectUrl, { target: "_top" });
+    onboarding.action = "error";
+  }
+
   const dashboardUrl = dashboardLoginUrl(onboarding);
 
   // The store's catalog, which agents share in chats from the Chatlivo inbox,
@@ -101,8 +110,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     status: onboarding.action ?? "error",
-    message: onboarding.message ?? null,
-    existingAccount: onboarding.existing_account === true,
     workspaceName: onboarding.organization?.name ?? null,
     storeUrl: `https://${session.shop}`,
     // true/false from the live theme; null when it could not be read
@@ -119,79 +126,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 const CONNECT_ERROR = "We couldn't connect your store right now. Please try again.";
 
-// Explicit merchant choices:
-// - signup: create a new Chatlivo account; the loader then re-runs, finds the
-//   store and shows it as connected.
-// - connect: get a one-time token for this shop; the merchant opens the
-//   Chatlivo dashboard in a new tab, where a logged-in owner/admin confirms.
+// Connected store, "Connect existing Chatlivo account": one-time link to the
+// chatlivo.com connect page for another account (confirmed there)
 export const action = async ({ request }: ActionFunctionArgs) => {
   const context = await authenticate.admin(request);
-  const { session } = context;
 
-  const formData = await request.formData();
-  const intent = String(formData.get("intent") ?? "");
-
-  if (intent !== "signup" && intent !== "connect") {
-    return { error: CONNECT_ERROR, connectUrl: null };
-  }
-
-  try {
-    const { payload } = await getShopPayload(context);
-    const backendResponse =
-      intent === "signup"
-        ? await chatlivoBackendFetch("/shopify/signup", payload)
-        : await chatlivoBackendFetch("/shopify/connect-token", payload);
-
-    const backendData = await backendResponse.json().catch(() => null);
-
-    if (!backendResponse.ok) {
-      return {
-        error:
-          backendResponse.status === 400 && backendData?.message
-            ? backendData.message
-            : CONNECT_ERROR,
-        connectUrl: null,
-      };
-    }
-
-    // Signup refuses when the store email already has an account
-    if (backendData?.data?.action === "link_required") {
-      return {
-        error: backendData.data.message ?? CONNECT_ERROR,
-        connectUrl: null,
-      };
-    }
-
-    if (intent === "connect") {
-      const token = backendData?.data?.token;
-      if (!token) return { error: CONNECT_ERROR, connectUrl: null };
-
-      const params = new URLSearchParams({
-        open: "shopify",
-        shopify_token: token,
-      });
-
-      return {
-        error: null,
-        connectUrl: `${import.meta.env.VITE_CHATLIVO_APP_URL}/settings/integration?${params.toString()}`,
-      };
-    }
-
-    return { error: null, connectUrl: null };
-  } catch (error) {
-    console.error(
-      `Chatlivo ${intent} request failed for ${session.shop}:`,
-      error instanceof Error ? error.message : String(error),
-    );
-    return { error: CONNECT_ERROR, connectUrl: null };
-  }
+  const connectUrl = await chatlivoConnectUrl(context);
+  return connectUrl
+    ? { error: null, connectUrl }
+    : { error: CONNECT_ERROR, connectUrl: null };
 };
 
 export default function AppIndex() {
   const {
     status,
-    message,
-    existingAccount,
     workspaceName,
     storeUrl,
     embedEnabled,
@@ -202,25 +150,6 @@ export default function AppIndex() {
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const revalidator = useRevalidator();
-
-  // Waiting for the merchant to log in on chatlivo.com and confirm the
-  // store: re-check every few seconds, so the page switches to "connected"
-  // on its own (stops after 15 minutes, when the connect link expires)
-  const waitingForConfirm =
-    status !== "login" && Boolean(fetcher.data?.connectUrl);
-  useEffect(() => {
-    if (!waitingForConfirm) return;
-    const startedAt = Date.now();
-    const timer = setInterval(() => {
-      if (Date.now() - startedAt > 15 * 60_000) {
-        clearInterval(timer);
-        return;
-      }
-      if (revalidator.state === "idle") revalidator.revalidate();
-    }, 5000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waitingForConfirm]);
 
   // Back from the theme editor, the store or chatlivo.com: re-check the
   // setup steps so their status updates without a reload
@@ -235,10 +164,7 @@ export default function AppIndex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const submittingIntent =
-    fetcher.state !== "idle" ? fetcher.formData?.get("intent") : null;
-  const submit = (intent: "signup" | "connect") =>
-    fetcher.submit({ intent }, { method: "post" });
+  const submitting = fetcher.state !== "idle";
 
   const errorBanner = fetcher.data?.error && (
     <s-banner tone="critical">{fetcher.data.error}</s-banner>
@@ -246,11 +172,10 @@ export default function AppIndex() {
 
   const connectExisting = (
     <ConnectExisting
-      connected={status === "login"}
       connectUrl={fetcher.data?.connectUrl}
-      submitting={submittingIntent === "connect"}
-      disabled={submittingIntent != null}
-      onConnect={() => submit("connect")}
+      submitting={submitting}
+      disabled={submitting}
+      onConnect={() => fetcher.submit({}, { method: "post" })}
     />
   );
 
@@ -393,111 +318,44 @@ export default function AppIndex() {
     );
   }
 
-  if (status === "error") {
-    return (
-      <s-page heading="Chatlivo">
-        <s-banner tone="critical" heading="We couldn't reach Chatlivo">
-          Please reload this page in a few minutes or contact Chatlivo
-          support.
-        </s-banner>
-      </s-page>
-    );
-  }
-
-  // Not connected yet (as in Tidio): log in to an existing Chatlivo account
-  // on chatlivo.com, or create a free account right here
-  const connectUrl = fetcher.data?.connectUrl;
-
+  // A store that is not connected never renders here: the loader sends the
+  // merchant to chatlivo.com instead
   return (
-    <s-page heading="Set up Chatlivo">
-      {errorBanner}
-      {message && <s-banner tone="info">{message}</s-banner>}
-      <s-section heading="Connect your store to Chatlivo">
-        <s-stack gap="base">
-          <s-paragraph>
-            Chatlivo adds live chat and an AI chatbot to your store. Log in
-            to your Chatlivo account, or create a free one, to finish setup.
-          </s-paragraph>
-
-          {existingAccount && !connectUrl && (
-            <s-banner tone="info">
-              This store&apos;s email already has a Chatlivo account. Log in
-              to connect this store to it.
-            </s-banner>
-          )}
-
-          {connectUrl ? (
-            <s-stack gap="base">
-              <s-button variant="primary" href={connectUrl} target="_blank">
-                Continue to Chatlivo
-              </s-button>
-              <s-paragraph>
-                Log in on chatlivo.com and confirm this store. This page
-                updates by itself once the store is connected.
-              </s-paragraph>
-            </s-stack>
-          ) : (
-            <s-stack direction="inline" gap="base">
-              <s-button
-                variant={existingAccount ? "primary" : "secondary"}
-                onClick={() => submit("connect")}
-                loading={submittingIntent === "connect"}
-                disabled={submittingIntent != null}
-              >
-                Log in to Chatlivo
-              </s-button>
-              <s-button
-                variant={existingAccount ? "secondary" : "primary"}
-                onClick={() => submit("signup")}
-                loading={submittingIntent === "signup"}
-                disabled={submittingIntent != null}
-              >
-                Create a free account
-              </s-button>
-            </s-stack>
-          )}
-
-          {!connectUrl && (
-            <s-paragraph>
-              A new account uses this store&apos;s email, and your store is
-              set as its website.
-            </s-paragraph>
-          )}
-        </s-stack>
-      </s-section>
+    <s-page heading="Chatlivo">
+      <s-banner tone="critical" heading="We couldn't reach Chatlivo">
+        Please reload this page in a few minutes or contact Chatlivo support.
+      </s-banner>
     </s-page>
   );
 }
 
-// "Already have a Chatlivo account?": the store admin starts it here, a
-// logged-in Chatlivo owner/admin confirms it on chatlivo.com (one-time code)
+// Move a connected store to another Chatlivo account: the store admin starts
+// it here, a logged-in Chatlivo owner/admin confirms it on chatlivo.com
 function ConnectExisting({
-  connected,
   connectUrl,
   submitting,
   disabled,
   onConnect,
 }: {
-  connected: boolean;
   connectUrl: string | null | undefined;
   submitting: boolean;
   disabled: boolean;
   onConnect: () => void;
 }) {
   return (
-    <s-section heading="Already have a Chatlivo account?">
+    <s-section heading="Use another Chatlivo account?">
       <s-paragraph>
-        {connected
-          ? "To move this store to another Chatlivo account, log in to that account in a new tab and confirm this store. The store and its chat widget then switch to that account."
-          : "Log in to Chatlivo in a new tab and confirm this store. It takes one click if you are already logged in."}
+        To move this store to another Chatlivo account, log in to that
+        account on chatlivo.com and confirm this store. The store and its
+        chat widget then switch to that account.
       </s-paragraph>
       {connectUrl ? (
         <s-stack gap="base">
-          <s-button variant="primary" href={connectUrl} target="_blank">
+          <s-button variant="primary" href={connectUrl} target="_top">
             Open Chatlivo to confirm
           </s-button>
           <s-paragraph>
-            After confirming, come back here and reload this page.
+            Chatlivo brings you back here once the store is connected.
           </s-paragraph>
         </s-stack>
       ) : (
