@@ -31,6 +31,10 @@ export async function getShopPayload({ admin, session }: AdminContext) {
         timezoneAbbreviation
         shopOwnerName
 
+        primaryDomain {
+          host
+        }
+
         billingAddress {
           country
         }
@@ -50,6 +54,8 @@ export async function getShopPayload({ admin, session }: AdminContext) {
     payload: {
       shop_domain: shop.myshopifyDomain,
       shop_name: shop.name,
+      // Storefront domain shoppers see (custom domain, else myshopify.com)
+      primary_domain: shop.primaryDomain?.host,
       email: shop.email,
       owner: shop.shopOwnerName,
       currency: shop.currencyCode,
