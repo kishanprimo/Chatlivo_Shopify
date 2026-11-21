@@ -8,8 +8,10 @@
   {%- comment -%}
     data-shop: the widget verifies against the connected store, so it shows on
     the .myshopify.com host, custom domains and theme previews alike.
+    data-bottom-offset: distance of the chat launcher from the bottom of the
+    screen, from the "Bottom offset" setting below.
   {%- endcomment -%}
-  <script async src="{{ widget_url }}/loader.js" data-key="{{ widget_key }}" data-shop="{{ shop.permanent_domain }}"></script>
+  <script async src="{{ widget_url }}/loader.js" data-key="{{ widget_key }}" data-shop="{{ shop.permanent_domain }}" data-bottom-offset="{{ block.settings.bottom_offset | default: 80 }}"></script>
 {%- else -%}
   <!-- Chatlivo: store not connected to a Chatlivo account yet -->
 {%- endif -%}
@@ -18,6 +20,18 @@
 {
   "name": "Chatlivo chat widget",
   "target": "body",
-  "settings": []
+  "settings": [
+    {
+      "type": "range",
+      "id": "bottom_offset",
+      "label": "Bottom offset",
+      "info": "Distance of the chat button from the bottom of the screen. Increase it if another button sits in the same corner.",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 80
+    }
+  ]
 }
 {% endschema %}
