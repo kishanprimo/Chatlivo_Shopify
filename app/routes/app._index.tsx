@@ -70,13 +70,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const onboarding = await getOnboarding(context);
 
-  // Not connected yet: the merchant logs in or registers on chatlivo.com,
-  // which connects this store and sends them back here. Leaves the admin
-  // iframe (target _top).
+  // Not connected yet: the app page opens in admin first (Shopify requires
+  // the app UI right after install), with one button to chatlivo.com where
+  // the merchant logs in or registers; that connects this store and sends
+  // them back here.
+  let connectUrl: string | null = null;
   if (onboarding.action === "choose") {
-    const connectUrl = await chatlivoConnectUrl(context);
-    if (connectUrl) throw context.redirect(connectUrl, { target: "_top" });
-    onboarding.action = "error";
+    connectUrl = await chatlivoConnectUrl(context);
+    if (!connectUrl) onboarding.action = "error";
   }
 
   const dashboardUrl = dashboardLoginUrl(onboarding);
@@ -115,6 +116,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // true/false from the live theme; null when it could not be read
     embedEnabled,
     dashboardUrl,
+    connectUrl,
     products,
     // Last time the storefront loaded the widget via the theme embed (from
     // chatlivo-api; null when not seen in the last 30 days)
@@ -144,6 +146,7 @@ export default function AppIndex() {
     storeUrl,
     embedEnabled,
     dashboardUrl,
+    connectUrl,
     themeEditorUrl,
     products,
     widgetSeenAt,
@@ -318,8 +321,29 @@ export default function AppIndex() {
     );
   }
 
-  // A store that is not connected never renders here: the loader sends the
-  // merchant to chatlivo.com instead
+  // Not connected: one button to chatlivo.com (log in or register there)
+  if (status === "choose" && connectUrl) {
+    return (
+      <s-page heading="Welcome to Chatlivo">
+        <s-section heading="Connect your store to Chatlivo">
+          <s-stack gap="base">
+            <s-paragraph>
+              Log in to your Chatlivo account or create one for free on
+              chatlivo.com. Your store connects automatically, your store
+              domain is added as your Chatlivo website, and you come back here
+              to switch the chat widget on.
+            </s-paragraph>
+            <s-stack direction="inline">
+              <s-button variant="primary" href={connectUrl} target="_top">
+                Continue to Chatlivo
+              </s-button>
+            </s-stack>
+          </s-stack>
+        </s-section>
+      </s-page>
+    );
+  }
+
   return (
     <s-page heading="Chatlivo">
       <s-banner tone="critical" heading="We couldn't reach Chatlivo">
